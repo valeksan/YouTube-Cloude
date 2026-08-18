@@ -415,7 +415,7 @@ class YouTubeDecoder:
         """Поиск маркера конца █████... в данных"""
         eof_bytes = b'\xe2\x96\x88' * 64
         
-        for i in range(len(data) - len(eof_bytes)):
+        for i in range(len(data) - len(eof_bytes) + 1):
             if data[i:i+len(eof_bytes)] == eof_bytes:
                 return i
         return -1
