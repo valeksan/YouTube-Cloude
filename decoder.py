@@ -15,10 +15,8 @@ from typing import Optional, Callable
 import numpy as np
 
 from core import (
-    WIDTH, HEIGHT,
-    BLOCK_WIDTH, BLOCK_HEIGHT, SPACING, MARKER_SIZE,
-    BLOCKS_X, BLOCKS_Y, BLOCKS_PER_REGION,
-    COLORS, EOF_MARKER, EOF_BYTES,
+    WIDTH, HEIGHT, COLORS, EOF_BYTES,
+    get_format, compute_grid, detect_format,
     decrypt_data, blocks_to_bytes, data_to_blocks,
 )
 
@@ -26,13 +24,12 @@ from core import (
 class YouTubeDecoder:
     """Decode a colour-block video back into the original file."""
 
-    def __init__(self, key: Optional[str] = None) -> None:
+    def __init__(self, key: Optional[str] = None,
+                 format_name: Optional[str] = None) -> None:
         self.width = WIDTH
         self.height = HEIGHT
-        self.block_height = BLOCK_HEIGHT
-        self.block_width = BLOCK_WIDTH
-        self.spacing = SPACING
-        self.marker_size = MARKER_SIZE
+        self.format_name = format_name  # None = auto-detect from video
+        self._format_configured = False
 
         import hashlib
         if key and str(key).strip():
@@ -47,19 +44,56 @@ class YouTubeDecoder:
         self.cache_hits = 0
         self.cache_misses = 0
 
-        self.blocks_x = BLOCKS_X
-        self.blocks_y = BLOCKS_Y
-        self.blocks_per_region = BLOCKS_PER_REGION
-
-        self._precompute_coordinates()
+        # If format known at init time, configure grid now
+        if format_name:
+            self._configure_format(get_format(format_name))
 
         print("=" * 60)
-        print("YouTube DECODER")
+        if format_name:
+            print(f"YouTube DECODER ({self.format_name})")
+        else:
+            print("YouTube DECODER (auto-detect)")
         print("=" * 60)
-        print(f"  Grid:   {self.blocks_x} x {self.blocks_y} blocks")
+        if self._format_configured:
+            print(f"  Grid:   {self.blocks_x} x {self.blocks_y} blocks")
         print(f"  Key:    {'YES' if self.key else 'NO'}")
 
+    def _configure_format(self, fmt: dict) -> None:
+        """Set grid parameters from a format dict."""
+        g = compute_grid(fmt)
+        self.format_name = g['name']
+        self.block_height = g['block_height']
+        self.block_width = g['block_width']
+        self.spacing = g['spacing']
+        self.marker_size = g['marker_size']
+        self.blocks_x = g['blocks_x']
+        self.blocks_y = g['blocks_y']
+        self.blocks_per_region = g['blocks_per_region']
+        self._precompute_coordinates()
+        self._format_configured = True
+
     # ── Coordinate pre-computation ──────────────────────────────────────
+    def _detect_marker_size(self, frame: np.ndarray) -> int:
+        """Detect marker size from the top-left corner of the first frame.
+
+        Scans along the top edge for the transition from white marker to black.
+        """
+        if frame.shape[1] != self.width or frame.shape[0] != self.height:
+            frame = cv2.resize(
+                frame, (self.width, self.height), interpolation=cv2.INTER_NEAREST
+            )
+        # Scan row y=marker_center, from x=0 rightward
+        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+        center_y = 40  # sample row
+        for x in range(10, min(200, self.width)):
+            if gray[center_y, x] < 128:  # dark = end of white marker
+                # Markers are square; check vertical too
+                center_x = x // 2
+                for y in range(10, min(200, self.height)):
+                    if gray[y, center_x] < 128:
+                        return x  # approximate marker size
+        return 80  # fallback to YTV1
+
     def _precompute_coordinates(self) -> None:
         """Precompute centre pixel coordinates for every block."""
         self.block_coords: list[tuple[int, int]] = []
@@ -172,6 +206,22 @@ class YouTubeDecoder:
         self.cache_misses = 0
         start_time = cv2.getTickCount()
 
+        # If format not yet configured, detect from first frame's marker
+        if not self._format_configured:
+            ret, first_frame = cap.read()
+            if ret:
+                detected_ms = self._detect_marker_size(first_frame)
+                print(f"  Detected marker size: {detected_ms}px")
+                self._configure_format(detect_format(detected_ms))
+                print(f"  Auto-detected format: {self.format_name}")
+                print(f"  Grid: {self.blocks_x} x {self.blocks_y} blocks")
+                # Seek back to frame 0
+                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
+            else:
+                # Can't read first frame → default to YTV1
+                self._configure_format(get_format('ytv1'))
+                print("  Warning: cannot read first frame, defaulting to YTV1")
+
         all_blocks: list[str] = []
         frames_processed = 0
 
@@ -222,57 +272,81 @@ class YouTubeDecoder:
         else:
             print("  Warning: EOF marker not found")
 
-        # Parse header
+        # Parse header — supports both:
+        #   New: FORMAT:YTV1:FILE:name:SIZE:123|
+        #   Old: FILE:name:SIZE:123|  (backward compat)
         data_str = bytes_data[:1000].decode('latin-1', errors='ignore')
-        pattern = r'FILE:([^:]+):SIZE:(\d+)\|'
-        match = re.search(pattern, data_str)
+        pattern_new = r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+)\|'
+        pattern_old = r'FILE:([^:]+):SIZE:(\d+)\|'
 
+        match = re.search(pattern_new, data_str)
         if match:
-            filename = match.group(1)
-            filesize = int(match.group(2))
-
-            print(f"\n  Header found: {filename}, size: {filesize} bytes")
-
+            header_format = match.group(1)
+            filename = match.group(2)
+            filesize = int(match.group(3))
             header_str = match.group(0)
-            header_bytes_enc = header_str.encode('latin-1')
-            header_pos = bytes_data.find(header_bytes_enc)
-
-            if header_pos >= 0:
-                encrypted_data = bytes_data[
-                    header_pos + len(header_bytes_enc):
-                    header_pos + len(header_bytes_enc) + filesize
-                ]
-
-                if self.key:
-                    file_data = decrypt_data(encrypted_data, self.key)
-                    print("  Data decrypted")
-                else:
-                    file_data = encrypted_data
-                    print("  Warning: data not decrypted (no key)")
-
-                output_path = os.path.join(output_dir, filename)
-                counter = 1
-                base, ext = os.path.splitext(filename)
-                while os.path.exists(output_path):
-                    output_path = os.path.join(output_dir, f"{base}_{counter}{ext}")
-                    counter += 1
-
-                with open(output_path, 'wb') as f:
-                    f.write(file_data)
-
-                print(f"\n  File restored: {output_path}")
-                print(f"  Size: {len(file_data)} bytes")
-
-                if len(file_data) == filesize:
-                    print("  Size matches original")
-                else:
-                    print(
-                        f"  Size mismatch: {len(file_data)} != {filesize}"
-                    )
-
-                return True
+            # Auto-configure if decoder didn't know format yet
+            if not self._format_configured:
+                try:
+                    self._configure_format(get_format(header_format))
+                    print(f"  Auto-detected format: {self.format_name}")
+                except ValueError:
+                    print(f"  Warning: unknown format '{header_format}', using defaults")
         else:
-            print("  Error: header not found")
+            match = re.search(pattern_old, data_str)
+            if match:
+                filename = match.group(1)
+                filesize = int(match.group(2))
+                header_str = match.group(0)
+                # Old format without FORMAT: field → assume YTV1
+                if not self._format_configured:
+                    self._configure_format(get_format('ytv1'))
+                    print("  Auto-detected format: YTV1 (legacy header)")
+            else:
+                print("  Error: header not found")
+                output_path = os.path.join(output_dir, "decoded_data.bin")
+                with open(output_path, 'wb') as f:
+                    f.write(bytes_data)
+                print(f"\n  Raw data saved: {output_path}")
+                return False
+
+        print(f"\n  Header found: {filename}, size: {filesize} bytes")
+
+        header_bytes_enc = header_str.encode('latin-1')
+        header_pos = bytes_data.find(header_bytes_enc)
+
+        if header_pos >= 0:
+            encrypted_data = bytes_data[
+                header_pos + len(header_bytes_enc):
+                header_pos + len(header_bytes_enc) + filesize
+            ]
+
+            if self.key:
+                file_data = decrypt_data(encrypted_data, self.key)
+                print("  Data decrypted")
+            else:
+                file_data = encrypted_data
+                print("  Warning: data not decrypted (no key)")
+
+            output_path = os.path.join(output_dir, filename)
+            counter = 1
+            base, ext = os.path.splitext(filename)
+            while os.path.exists(output_path):
+                output_path = os.path.join(output_dir, f"{base}_{counter}{ext}")
+                counter += 1
+
+            with open(output_path, 'wb') as f:
+                f.write(file_data)
+
+            print(f"\n  File restored: {output_path}")
+            print(f"  Size: {len(file_data)} bytes")
+
+            if len(file_data) == filesize:
+                print("  Size matches original")
+            else:
+                print(f"  Size mismatch: {len(file_data)} != {filesize}")
+
+            return True
 
         # Fallback: save raw bytes
         output_path = os.path.join(output_dir, "decoded_data.bin")

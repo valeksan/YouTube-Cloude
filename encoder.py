@@ -18,10 +18,8 @@ from typing import Optional, Callable
 import numpy as np
 
 from core import (
-    WIDTH, HEIGHT, FPS,
-    BLOCK_WIDTH, BLOCK_HEIGHT, SPACING, MARKER_SIZE,
-    BLOCKS_X, BLOCKS_Y, BLOCKS_PER_REGION,
-    COLORS, EOF_MARKER, EOF_BYTES,
+    WIDTH, HEIGHT, COLORS, EOF_MARKER, EOF_BYTES,
+    get_format, compute_grid,
     encrypt_data, data_to_blocks, sanitize_filename, validate_input_file,
 )
 
@@ -29,16 +27,25 @@ from core import (
 class YouTubeEncoder:
     """Encode a file into a video of colour-block frames."""
 
-    def __init__(self, key: Optional[str] = None) -> None:
+    def __init__(self, key: Optional[str] = None,
+                 format_name: str = 'ytv1') -> None:
         self.width = WIDTH
         self.height = HEIGHT
-        self.fps = FPS
         self.max_file_size = 100 * 1024 * 1024
 
-        self.block_height = BLOCK_HEIGHT
-        self.block_width = BLOCK_WIDTH
-        self.spacing = SPACING
-        self.marker_size = MARKER_SIZE
+        # Format-specific parameters
+        fmt = get_format(format_name)
+        g = compute_grid(fmt)
+        self.fps = g['fps']
+        self.block_height = g['block_height']
+        self.block_width = g['block_width']
+        self.spacing = g['spacing']
+        self.marker_size = g['marker_size']
+        self.blocks_x = g['blocks_x']
+        self.blocks_y = g['blocks_y']
+        self.blocks_per_region = g['blocks_per_region']
+        self.blocks_per_frame = g['blocks_per_frame']
+        self.format_name = g['name']
 
         import hashlib
         if key and str(key).strip():
@@ -49,18 +56,11 @@ class YouTubeEncoder:
             self.use_encryption = False
 
         self.colors = COLORS
-        self.marker_size = MARKER_SIZE
-
-        self.blocks_x = BLOCKS_X
-        self.blocks_y = BLOCKS_Y
-        self.blocks_per_region = BLOCKS_PER_REGION
-        self.blocks_per_frame = BLOCKS_PER_REGION * 3
-
         self.eof_marker = EOF_MARKER
         self.eof_bytes = EOF_BYTES
 
         print("=" * 60)
-        print("YouTube ENCODER (6 FPS)")
+        print(f"YouTube ENCODER ({self.format_name} | {self.fps} FPS)")
         print("=" * 60)
         print(f"  Grid: {self.blocks_x} x {self.blocks_y} blocks per region")
         print(f"  FPS:  {self.fps}")
@@ -153,7 +153,8 @@ class YouTubeEncoder:
         else:
             encrypted_data = data
 
-        header = f"FILE:{original_filename}:SIZE:{len(data)}|"
+        # Header: includes format name for auto-detection
+        header = f"FORMAT:{self.format_name}:FILE:{original_filename}:SIZE:{len(data)}|"
         try:
             header_bytes = header.encode('latin-1')
         except UnicodeEncodeError:

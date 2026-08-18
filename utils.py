@@ -51,28 +51,42 @@ def add_key_args(subparser: argparse._SubParsersAction) -> None:  # type: ignore
     )
 
 
+def add_format_arg(subparser: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+    """Add format selection argument to *subparser*."""
+    subparser.add_argument(
+        '--format',
+        metavar='FMT',
+        choices=['ytv1', 'ytv2'],
+        default='ytv1',
+        help='Video format: ytv1 (default, 6 FPS) or ytv2 (15 FPS, 125x denser)',
+    )
+
+
 def main() -> None:
     """CLI entry-point."""
     parser = argparse.ArgumentParser(
         prog='coder.py',
-        description='YouTube File Storage (6 FPS) - encode files into video',
+        description='YouTube File Storage - encode files into video',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  # Encode without encryption
+  # Encode without encryption (YTV1 default)
   python coder.py encode file.zip output.mp4
+
+  # Encode in YTV2 format (125x denser, 15 FPS)
+  python coder.py encode file.zip output.mp4 --format ytv2
 
   # Encode with key on command line
   python coder.py encode file.zip output.mp4 --key "mysecretpassword"
 
-  # Encode with key from file
-  python coder.py encode file.zip output.mp4 --key-file /path/to/key.txt
+  # Decode with auto-detect format
+  python coder.py decode output.mp4
+
+  # Decode with explicit format
+  python coder.py decode output.mp4 --format ytv2
 
   # Decode with key on command line
   python coder.py decode output.mp4 --key "mysecretpassword"
-
-  # Decode with key from file
-  python coder.py decode output.mp4 --key-file /path/to/key.txt
 
   # If key.txt is next to the script, it is picked up automatically
   python coder.py decode output.mp4
@@ -95,6 +109,7 @@ Examples:
         help='Output MP4 filename (default: output.mp4)',
     )
     add_key_args(enc)
+    add_format_arg(enc)
 
     # decode
     dec = subparsers.add_parser('decode', help='Decode a video back to a file')
@@ -109,14 +124,16 @@ Examples:
         help='Output directory (default: current)',
     )
     add_key_args(dec)
+    add_format_arg(dec)
 
     args = parser.parse_args()
     key = resolve_key(args)
 
     if args.command == 'encode':
-        encoder = YouTubeEncoder(key)
+        encoder = YouTubeEncoder(key, format_name=args.format)
         encoder.encode(args.input_file, args.output_file)
 
     elif args.command == 'decode':
-        decoder = YouTubeDecoder(key)
+        # Decode auto-detects from video header/frame; --format is a hint
+        decoder = YouTubeDecoder(key, format_name=args.format)
         decoder.decode(args.video_file, args.output_dir)
