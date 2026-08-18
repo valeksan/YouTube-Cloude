@@ -7,7 +7,7 @@
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.x-5C3EE8?logo=opencv&logoColor=white)](https://opencv.org/)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-optional-green)](https://ffmpeg.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License](https://img.shields.io/badge/License-None%20(yet)-red)](#license)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)]()
 
 *Encode any file into a video of colour-block frames, upload to YouTube, and download it back — even if YouTube re-encodes the video.*
@@ -160,7 +160,11 @@ Contributions are welcome! Please open an issue or submit a pull request.
 
 ## License
 
-MIT — see [LICENSE](LICENSE) for details.
+**No license has been set by the original author or any contributor.** This project builds on unlicensed code, which means it is technically "All Rights Reserved" under copyright law.
+
+If you are the original author ([@KorocheVolgin](https://github.com/KorocheVolgin)) or a contributor and would like to add an open-source license (e.g., MIT), please open an issue or contact me. Adding a license would benefit the entire community.
+
+Until then, please respect the author's rights and use this code for personal/educational purposes only.
 
 ---
 
