@@ -7,6 +7,7 @@ See: https://github.com/Hinderchik/YouTube-Cloude-Fork
      https://github.com/sosatel30000/YouTube-Cloude
 GUI concepts from @Maksim4081862.
 """
+import os
 import zlib
 from pathlib import Path
 from typing import Optional
@@ -121,19 +122,55 @@ DANGEROUS_EXTENSIONS: set[str] = {
 MAX_FILE_SIZE: int = 100 * 1024 * 1024
 
 
-# ── XOR encryption / decryption ────────────────────────────────────────────
-def encrypt_data(data: bytes, key: bytes) -> bytes:
-    """XOR-encrypt *data* by cycling through *key*."""
-    result = bytearray()
-    key_len = len(key)
-    for i, byte in enumerate(data):
-        result.append(byte ^ key[i % key_len])
-    return bytes(result)
+# ── AES-256-CBC encryption / decryption ─────────────────────────────────────
+# Based on PR #10 by @Verdgil: https://github.com/KorocheVolgin/YouTube-Cloude/pull/10
+# Uses pycryptodome (pip install pycryptodome)
+
+def _get_aes():
+    """Lazy-import AES to allow running without pycryptodome when unencrypted."""
+    try:
+        from Crypto.Cipher import AES as _AES
+        from Crypto.Util.Padding import pad as _pad, unpad as _unpad
+        return _AES, _pad, _unpad
+    except ImportError:
+        raise ImportError(
+            "pycryptodome is required for AES encryption. "
+            "Install it: pip install pycryptodome"
+        )
 
 
-def decrypt_data(data: bytes, key: bytes) -> bytes:
-    """XOR-decrypt *data* by cycling through *key* (symmetric)."""
-    return encrypt_data(data, key)
+def generate_iv() -> bytes:
+    """Generate a cryptographically random 16-byte IV for AES-CBC."""
+    return os.urandom(16)
+
+
+def derive_key(key_str: str) -> bytes:
+    """Derive a 32-byte AES-256 key from a passphrase via SHA-256."""
+    import hashlib
+    return hashlib.sha256(key_str.encode('utf-8')).digest()
+
+
+def encrypt_data(data: bytes, key: bytes, iv: bytes) -> bytes:
+    """AES-256-CBC encrypt *data* with *key* and *iv*.
+
+    *key* must be 32 bytes (use ``derive_key``).
+    *iv* must be 16 bytes (use ``generate_iv``).
+    Returns ciphertext (padded to AES block size).
+    """
+    AES, pad, _ = _get_aes()
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    return cipher.encrypt(pad(data, AES.block_size))
+
+
+def decrypt_data(data: bytes, key: bytes, iv: bytes) -> bytes:
+    """AES-256-CBC decrypt *data* with *key* and *iv*.
+
+    *key* must be 32 bytes, *iv* must be 16 bytes.
+    Returns unpadded plaintext.
+    """
+    AES, _, unpad = _get_aes()
+    cipher = AES.new(key, AES.MODE_CBC, iv)
+    return unpad(cipher.decrypt(data), AES.block_size)
 
 
 # ── Bit / byte conversions ─────────────────────────────────────────────────

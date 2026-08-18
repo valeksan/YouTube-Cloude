@@ -20,7 +20,8 @@ import numpy as np
 from core import (
     WIDTH, HEIGHT, COLORS, EOF_MARKER, EOF_BYTES,
     get_format, compute_grid,
-    encrypt_data, data_to_blocks, sanitize_filename, validate_input_file,
+    encrypt_data, generate_iv, derive_key,
+    data_to_blocks, sanitize_filename, validate_input_file,
     crc32_hex, interlace_frame,
 )
 
@@ -50,9 +51,8 @@ class YouTubeEncoder:
         self.blocks_per_frame = g['blocks_per_frame']
         self.format_name = g['name']
 
-        import hashlib
         if key and str(key).strip():
-            self.key: Optional[bytes] = hashlib.sha256(str(key).encode()).digest()
+            self.key: Optional[bytes] = derive_key(str(key))
             self.use_encryption = True
         else:
             self.key = None
@@ -67,7 +67,7 @@ class YouTubeEncoder:
         print("=" * 60)
         print(f"  Grid: {self.blocks_x} x {self.blocks_y} blocks per region")
         print(f"  FPS:  {self.fps}")
-        print(f"  Encryption: {'ON' if self.use_encryption else 'OFF'}")
+        print(f"  Encryption: {'AES-256-CBC' if self.use_encryption else 'OFF'}")
         print(f"  Interlace:  {'ON' if self.interlace else 'OFF'}")
 
     # ── Drawing helpers ─────────────────────────────────────────────────
@@ -152,16 +152,26 @@ class YouTubeEncoder:
             return False
 
         if self.use_encryption:
-            encrypted_data = encrypt_data(data, self.key)
-            print("  Data encrypted")
+            iv = generate_iv()
+            encrypted_data = encrypt_data(data, self.key, iv)
+            iv_hex = iv.hex()
+            print("  Data encrypted (AES-256-CBC)")
         else:
             encrypted_data = data
+            iv_hex = None
 
         # CRC32 of encrypted data for integrity check
         data_crc = crc32_hex(encrypted_data)
 
-        # Header: FORMAT:YTV2:FILE:name:SIZE:123:CRC:abcdef12|
-        header = f"FORMAT:{self.format_name}:FILE:{original_filename}:SIZE:{len(data)}:CRC:{data_crc}|"
+        # Header: FORMAT:YTV2:FILE:name:SIZE:123:ENC_SIZE:456:IV:hex...:CRC:abcdef12|
+        if iv_hex:
+            header = (
+                f"FORMAT:{self.format_name}:FILE:{original_filename}:"
+                f"SIZE:{len(data)}:ENC_SIZE:{len(encrypted_data)}:"
+                f"IV:{iv_hex}:CRC:{data_crc}|"
+            )
+        else:
+            header = f"FORMAT:{self.format_name}:FILE:{original_filename}:SIZE:{len(data)}:CRC:{data_crc}|"
         try:
             header_bytes = header.encode('latin-1')
         except UnicodeEncodeError:

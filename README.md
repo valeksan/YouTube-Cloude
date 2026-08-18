@@ -27,7 +27,7 @@ Each 4-bit chunk of your file is mapped to one of 16 colours and drawn as a bloc
 
 ## Features
 
-- 🔐 **XOR encryption** — optional key-based encryption (SHA-256 hashed)
+- 🔐 **AES-256-CBC encryption** — optional key-based encryption (SHA-256 key derivation, random IV)
 - 🎞️ **Two formats** — YTV1 (standard) and YTV2 (21× denser)
 - 📊 **CRC32 integrity** — automatic verification on decode
 - 🔀 **Interlacing** — improved YouTube compression quality
@@ -41,7 +41,9 @@ Each 4-bit chunk of your file is mapped to one of 16 colours and drawn as a bloc
 ### Install Dependencies
 
 ```bash
-pip install opencv-python numpy
+pip install -r requirements.txt
+# Or manually:
+pip install opencv-python numpy pycryptodome
 # Optional: FFmpeg for better video quality
 sudo apt install ffmpeg    # Linux
 brew install ffmpeg        # macOS
@@ -114,7 +116,7 @@ YouTube-Cloude/
 
 ## Encryption
 
-You can encrypt files before encoding:
+Files can be encrypted with AES-256-CBC before encoding:
 
 ```bash
 # Key from command line
@@ -126,7 +128,7 @@ python coder.py encode file.zip video.mp4
 python coder.py decode video.mp4   # key.txt auto-detected
 ```
 
-> ⚠️ **Warning:** Without the correct key, the decoded file will be garbage. The key is hashed with SHA-256 before use.
+> ⚠️ **Warning:** Without the correct key, the decoded file will be garbage. The key is derived via SHA-256 and each encode generates a unique random IV.
 
 ## Credits
 
@@ -139,6 +141,7 @@ This project builds on the work of:
 | [**@IvanSCP**](https://github.com/IvanSCP) | argparse CLI, key-file support |
 | [**@sosatel30000**](https://github.com/sosatel30000) | YTV2 format, region sampling, progress callbacks |
 | [**@Maksim4081862**](https://github.com/Maksim4081862) | GUI concepts, tkinter implementation |
+| [**@Verdgil**](https://github.com/Verdgil) | AES-256-CBC encryption (PR [#10](https://github.com/KorocheVolgin/YouTube-Cloude/pull/10)) |
 
 ## Related Projects
 

@@ -17,7 +17,8 @@ import numpy as np
 from core import (
     WIDTH, HEIGHT, COLORS, EOF_BYTES,
     get_format, compute_grid, detect_format,
-    decrypt_data, blocks_to_bytes, data_to_blocks,
+    decrypt_data, derive_key,
+    blocks_to_bytes, data_to_blocks,
     verify_crc32, deinterlace_frame,
 )
 
@@ -36,7 +37,7 @@ class YouTubeDecoder:
 
         import hashlib
         if key and str(key).strip():
-            self.key: Optional[bytes] = hashlib.sha256(str(key).encode()).digest()
+            self.key: Optional[bytes] = derive_key(str(key))
         else:
             self.key = None
 
@@ -277,79 +278,131 @@ class YouTubeDecoder:
         else:
             print("  Warning: EOF marker not found")
 
-        # Parse header — supports:
-        #   New+ CRC: FORMAT:YTV2:FILE:name:SIZE:123:CRC:abcdef12|
-        #   New:      FORMAT:YTV2:FILE:name:SIZE:123|
-        #   Old:      FILE:name:SIZE:123|  (backward compat)
+        # Parse header — supports multiple generations:
+        #   AES+CRC:  FORMAT:YTV2:FILE:n:SIZE:123:ENC_SIZE:456:IV:hex:CRC:abcd|
+        #   AES:      FORMAT:YTV2:FILE:n:SIZE:123:ENC_SIZE:456:IV:hex|
+        #   CRC:      FORMAT:YTV2:FILE:n:SIZE:123:CRC:abcd|
+        #   Plain:    FORMAT:YTV2:FILE:n:SIZE:123|
+        #   Legacy:   FILE:n:SIZE:123|  (backward compat, XOR era)
         data_str = bytes_data[:1000].decode('latin-1', errors='ignore')
-        pattern_crc = r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):CRC:([0-9a-fA-F]{8})\|'
-        pattern_new = r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+)\|'
-        pattern_old = r'FILE:([^:]+):SIZE:(\d+)\|'
+
+        # Try patterns from most specific to least specific
+        patterns = [
+            # AES + CRC (newest)
+            (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):ENC_SIZE:(\d+):IV:([0-9a-fA-F]{32}):CRC:([0-9a-fA-F]{8})\|',
+             'aes_crc'),
+            # AES only
+            (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):ENC_SIZE:(\d+):IV:([0-9a-fA-F]{32})\|',
+             'aes'),
+            # CRC only (pre-AES)
+            (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):CRC:([0-9a-fA-F]{8})\|',
+             'crc'),
+            # Plain FORMAT
+            (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+)\|',
+             'plain'),
+            # Legacy
+            (r'FILE:([^:]+):SIZE:(\d+)\|',
+             'legacy'),
+        ]
 
         expected_crc: Optional[str] = None
+        iv_hex: Optional[str] = None
+        enc_size: Optional[int] = None
+        header_format = None
+        filename = None
+        filesize = None
+        header_str = None
+        matched_type = None
 
-        match = re.search(pattern_crc, data_str)
-        if match:
-            header_format = match.group(1)
-            filename = match.group(2)
-            filesize = int(match.group(3))
-            expected_crc = match.group(4).lower()
-            header_str = match.group(0)
-            if not self._format_configured:
-                try:
-                    self._configure_format(get_format(header_format))
-                    print(f"  Auto-detected format: {self.format_name}")
-                except ValueError:
-                    print(f"  Warning: unknown format '{header_format}', using defaults")
-        else:
-            match = re.search(pattern_new, data_str)
+        for pat, htype in patterns:
+            match = re.search(pat, data_str)
             if match:
-                header_format = match.group(1)
-                filename = match.group(2)
-                filesize = int(match.group(3))
+                matched_type = htype
                 header_str = match.group(0)
-                if not self._format_configured:
-                    try:
-                        self._configure_format(get_format(header_format))
-                        print(f"  Auto-detected format: {self.format_name}")
-                    except ValueError:
-                        print(f"  Warning: unknown format '{header_format}', using defaults")
-            else:
-                match = re.search(pattern_old, data_str)
-                if match:
+                if htype == 'aes_crc':
+                    header_format = match.group(1)
+                    filename = match.group(2)
+                    filesize = int(match.group(3))
+                    enc_size = int(match.group(4))
+                    iv_hex = match.group(5)
+                    expected_crc = match.group(6).lower()
+                elif htype == 'aes':
+                    header_format = match.group(1)
+                    filename = match.group(2)
+                    filesize = int(match.group(3))
+                    enc_size = int(match.group(4))
+                    iv_hex = match.group(5)
+                elif htype == 'crc':
+                    header_format = match.group(1)
+                    filename = match.group(2)
+                    filesize = int(match.group(3))
+                    expected_crc = match.group(4).lower()
+                elif htype == 'plain':
+                    header_format = match.group(1)
+                    filename = match.group(2)
+                    filesize = int(match.group(3))
+                elif htype == 'legacy':
                     filename = match.group(1)
                     filesize = int(match.group(2))
-                    header_str = match.group(0)
-                    if not self._format_configured:
-                        self._configure_format(get_format('ytv1'))
-                        print("  Auto-detected format: YTV1 (legacy header)")
-                else:
-                    print("  Error: header not found")
-                    output_path = os.path.join(output_dir, "decoded_data.bin")
-                    with open(output_path, 'wb') as f:
-                        f.write(bytes_data)
-                    print(f"\n  Raw data saved: {output_path}")
-                    return False
+                break
+
+        if not match:
+            print("  Error: header not found")
+            output_path = os.path.join(output_dir, "decoded_data.bin")
+            with open(output_path, 'wb') as f:
+                f.write(bytes_data)
+            print(f"\n  Raw data saved: {output_path}")
+            return False
+
+        # Auto-configure format
+        if header_format and not self._format_configured:
+            try:
+                self._configure_format(get_format(header_format))
+                print(f"  Auto-detected format: {self.format_name}")
+            except ValueError:
+                print(f"  Warning: unknown format '{header_format}', using defaults")
+        elif not self._format_configured:
+            self._configure_format(get_format('ytv1'))
+            print("  Auto-detected format: YTV1 (legacy header)")
 
         print(f"\n  Header found: {filename}, size: {filesize} bytes")
+        print(f"  Header type:  {matched_type}")
+        if iv_hex:
+            print(f"  AES IV:       {iv_hex}")
         if expected_crc:
-            print(f"  CRC32 expected: {expected_crc}")
+            print(f"  CRC32:        {expected_crc}")
 
         header_bytes_enc = header_str.encode('latin-1')
         header_pos = bytes_data.find(header_bytes_enc)
 
         if header_pos >= 0:
+            # Use enc_size if available, otherwise use filesize
+            data_len = enc_size if enc_size else filesize
             encrypted_data = bytes_data[
                 header_pos + len(header_bytes_enc):
-                header_pos + len(header_bytes_enc) + filesize
+                header_pos + len(header_bytes_enc) + data_len
             ]
 
-            if self.key:
-                file_data = decrypt_data(encrypted_data, self.key)
-                print("  Data decrypted")
+            if self.key and iv_hex:
+                # AES-256-CBC decryption
+                iv = bytes.fromhex(iv_hex)
+                try:
+                    file_data = decrypt_data(encrypted_data, self.key, iv)
+                    print("  Data decrypted (AES-256-CBC)")
+                except Exception as e:
+                    print(f"  Decryption failed: {e}")
+                    print("  Saving raw data instead...")
+                    file_data = encrypted_data
+            elif self.key and not iv_hex:
+                # Legacy XOR (pre-AES headers)
+                print("  Warning: legacy XOR header detected, AES key cannot decrypt")
+                file_data = encrypted_data
             else:
                 file_data = encrypted_data
-                print("  Warning: data not decrypted (no key)")
+                if iv_hex:
+                    print("  Warning: encrypted data but no key provided")
+                else:
+                    print("  Data not encrypted")
 
             output_path = os.path.join(output_dir, filename)
             counter = 1
