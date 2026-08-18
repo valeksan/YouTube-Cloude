@@ -1,4 +1,7 @@
 # youtube_storage_fixed.py
+# Improvements based on work by @Hinderchik and @IvanSCP
+# See: https://github.com/Hinderchik/YouTube-Cloude-Fork
+#      https://github.com/IvanSCP/YouTube-Cloude
 import cv2
 import numpy as np
 import os
@@ -9,6 +12,8 @@ import shutil
 import sys
 import re
 import hashlib
+import argparse
+from pathlib import Path
 from collections import Counter
 
 class YouTubeEncoder:
@@ -16,15 +21,20 @@ class YouTubeEncoder:
         self.width = 1920
         self.height = 1080
         self.fps = 6  # ИЗМЕНЕНО: теперь 6 кадров в секунду
+        self.max_file_size = 100 * 1024 * 1024  # 100 MB limit
         
         # Параметры
         self.block_height = 16
         self.block_width = 24
         self.spacing = 4
         
-        # Ключ шифрования
-        self.key = key
-        self.use_encryption = key is not None
+        # Ключ шифрования (SHA-256 hash)
+        if key and str(key).strip():
+            self.key = hashlib.sha256(str(key).encode()).digest()
+            self.use_encryption = True
+        else:
+            self.key = None
+            self.use_encryption = False
         
         # 16 цветов
         self.colors = {
@@ -71,27 +81,44 @@ class YouTubeEncoder:
         if not self.use_encryption:
             return data
         
-        key_bytes = self.key.encode()
         result = bytearray()
-        
+        key_len = len(self.key)
         for i, byte in enumerate(data):
-            key_byte = key_bytes[i % len(key_bytes)]
-            result.append(byte ^ key_byte)
+            result.append(byte ^ self.key[i % key_len])
         
-        return result
+        return bytes(result)
+    
+    def _sanitize_filename(self, filename):
+        """Очищает имя файла от опасных символов и расширений"""
+        name = Path(filename).name
+        name = re.sub(r'[^a-zA-Z0-9._-]', '_', name)
+        parts = name.rsplit('.', 1)
+        if len(parts) > 1:
+            dangerous = {'.exe', '.bat', '.sh', '.py', '.js', '.dll', '.so', '.com'}
+            if f".{parts[1].lower()}" in dangerous:
+                name = f"{parts[0]}.bin"
+        return name or "file.bin"
+    
+    def _validate_input_file(self, filepath):
+        """Проверяет входной файл: существование, тип, размер"""
+        path = Path(filepath).resolve()
+        if not path.exists():
+            raise FileNotFoundError(f"Файл не найден: {filepath}")
+        if not path.is_file():
+            raise ValueError(f"Не является файлом: {filepath}")
+        if path.stat().st_size > self.max_file_size:
+            raise ValueError(f"Файл слишком большой: {path.stat().st_size} байт (макс. {self.max_file_size})")
+        if path.stat().st_size == 0:
+            raise ValueError("Файл пуст")
+        return path
     
     def _draw_markers(self, frame):
-        """Рисует маркеры по углам"""
-        cv2.rectangle(frame, (0, 0), (self.marker_size, self.marker_size), (255, 255, 255), -1)
-        cv2.rectangle(frame, (self.width-self.marker_size, 0), (self.width, self.marker_size), (255, 255, 255), -1)
-        cv2.rectangle(frame, (0, self.height-self.marker_size), (self.marker_size, self.height), (255, 255, 255), -1)
-        cv2.rectangle(frame, (self.width-self.marker_size, self.height-self.marker_size), (self.width, self.height), (255, 255, 255), -1)
-        
-        cv2.rectangle(frame, (0, 0), (self.marker_size, self.marker_size), (0, 0, 0), 2)
-        cv2.rectangle(frame, (self.width-self.marker_size, 0), (self.width, self.marker_size), (0, 0, 0), 2)
-        cv2.rectangle(frame, (0, self.height-self.marker_size), (self.marker_size, self.height), (0, 0, 0), 2)
-        cv2.rectangle(frame, (self.width-self.marker_size, self.height-self.marker_size), (self.width, self.height), (0, 0, 0), 2)
-        
+        """Рисует маркеры по углам (loop вместо 8 копипаст)"""
+        for x, y in [(0, 0), (self.width - self.marker_size, 0),
+                     (0, self.height - self.marker_size),
+                     (self.width - self.marker_size, self.height - self.marker_size)]:
+            cv2.rectangle(frame, (x, y), (x + self.marker_size, y + self.marker_size), (255, 255, 255), -1)
+            cv2.rectangle(frame, (x, y), (x + self.marker_size, y + self.marker_size), (0, 0, 0), 2)
         return frame
     
     def _draw_block(self, frame, x, y, color):
@@ -127,18 +154,32 @@ class YouTubeEncoder:
         blocks = [''.join(all_bits[i:i+4]) for i in range(0, len(all_bits), 4)]
         return blocks
     
-    def encode(self, input_file, output_file):
+    def encode(self, input_file, output_file="output.mp4"):
         """Кодирует файл в видео с опциональным шифрованием"""
         
         print("\n📤 КОДИРОВАНИЕ ФАЙЛА")
         print("-" * 40)
         
-        # Читаем файл
-        with open(input_file, 'rb') as f:
-            data = f.read()
+        # Валидация входного файла
+        try:
+            input_path = self._validate_input_file(input_file)
+        except (FileNotFoundError, ValueError) as e:
+            print(f"❌ {e}")
+            return False
         
-        print(f"📄 Файл: {input_file}")
-        print(f"📦 Размер: {len(data)} байт")
+        # Очистка имени файла
+        original_filename = self._sanitize_filename(input_path.name)
+        
+        print(f"📄 Файл: {original_filename}")
+        print(f"📦 Размер: {input_path.stat().st_size} байт")
+        
+        # Читаем файл
+        try:
+            with open(input_path, 'rb') as f:
+                data = f.read()
+        except IOError as e:
+            print(f"❌ Ошибка чтения файла: {e}")
+            return False
         
         # Шифруем данные если нужно
         if self.use_encryption:
@@ -148,8 +189,12 @@ class YouTubeEncoder:
             encrypted_data = data
         
         # Создаем заголовок
-        header = f"FILE:{os.path.basename(input_file)}:SIZE:{len(data)}|"
-        header_bytes = header.encode('latin-1')
+        header = f"FILE:{original_filename}:SIZE:{len(data)}|"
+        try:
+            header_bytes = header.encode('latin-1')
+        except UnicodeEncodeError:
+            print("❌ Недопустимые символы в имени файла")
+            return False
         print(f"📋 Заголовок: {header}")
         
         # Конвертируем в блоки
@@ -169,99 +214,101 @@ class YouTubeEncoder:
         print(f"⏱️  Длительность видео: {frames_needed/self.fps:.1f} сек")
         
         # Создаем временную папку
-        temp_dir = tempfile.mkdtemp()
+        temp_dir = tempfile.mkdtemp(prefix="youtube_encoder_")
         print(f"📁 Временная папка: {temp_dir}")
         
-        # Создаем кадры
-        for frame_num in range(frames_needed - 5):
-            print(f"\n🖼️  Кадр {frame_num + 1}/{frames_needed}")
-            
-            frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-            frame = self._draw_markers(frame)
-            
-            start_idx = frame_num * self.blocks_per_region
-            end_idx = min(start_idx + self.blocks_per_region, len(all_blocks))
-            frame_blocks = all_blocks[start_idx:end_idx]
-            
-            # Основные блоки
-            for idx, bits in enumerate(frame_blocks):
-                y = idx // self.blocks_x
-                x = idx % self.blocks_x
-                if y < self.blocks_y:
-                    color = self._bits_to_color(bits)
-                    self._draw_block(frame, x, y, color)
-            
-            # Резерв 1
-            for idx, bits in enumerate(frame_blocks):
-                y = idx // self.blocks_x
-                x = idx % self.blocks_x + self.blocks_x
-                if x < self.blocks_x * 2 and y < self.blocks_y:
-                    color = self._bits_to_color(bits)
-                    self._draw_block(frame, x, y, color)
-            
-            # Резерв 2
-            for idx, bits in enumerate(frame_blocks):
-                y = idx // self.blocks_x + self.blocks_y
-                x = idx % self.blocks_x
-                if x < self.blocks_x and y < self.blocks_y * 2:
-                    color = self._bits_to_color(bits)
-                    self._draw_block(frame, x, y, color)
-            
-            # Сохраняем кадр
-            frame_file = os.path.join(temp_dir, f"frame_{frame_num:05d}.png")
-            cv2.imwrite(frame_file, frame)
-        
-        # Создаем защитные кадры (синий фон)
-        print("\n🛡️  Создание защитных кадров...")
-        for i in range(5):
-            frame_num = frames_needed - 5 + i
-            frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-            frame = self._draw_markers(frame)
-            for y in range(self.blocks_y * 2):
-                for x in range(self.blocks_x * 2):
-                    self._draw_block(frame, x, y, (255, 0, 0))
-            frame_file = os.path.join(temp_dir, f"frame_{frame_num:05d}.png")
-            cv2.imwrite(frame_file, frame)
-            print(f"  🟦 Защитный кадр {i+1}/5")
-        
-        # Конвертируем в MP4
-        print("\n🎞️  Конвертация в MP4...")
-        
         try:
-            subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
-            
-            cmd = [
-                'ffmpeg',
-                '-framerate', str(self.fps),
-                '-i', os.path.join(temp_dir, 'frame_%05d.png'),
-                '-c:v', 'libx264',
-                '-preset', 'slow',
-                '-crf', '23',
-                '-pix_fmt', 'yuv420p',
-                '-an',
-                '-movflags', '+faststart',
-                '-y',
-                output_file
-            ]
-            
-            subprocess.run(cmd, check=True, capture_output=True)
-            print("✅ FFmpeg конвертация успешна")
-            
-        except Exception as e:
-            print(f"⚠️ FFmpeg не доступен, использую OpenCV...")
-            fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-            out = cv2.VideoWriter(output_file, fourcc, self.fps, (self.width, self.height))
-            
-            for frame_num in range(frames_needed):
+            # Создаем кадры
+            for frame_num in range(frames_needed - 5):
+                print(f"\n🖼️  Кадр {frame_num + 1}/{frames_needed}")
+                
+                frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+                frame = self._draw_markers(frame)
+                
+                start_idx = frame_num * self.blocks_per_region
+                end_idx = min(start_idx + self.blocks_per_region, len(all_blocks))
+                frame_blocks = all_blocks[start_idx:end_idx]
+                
+                # Основные блоки
+                for idx, bits in enumerate(frame_blocks):
+                    y = idx // self.blocks_x
+                    x = idx % self.blocks_x
+                    if y < self.blocks_y:
+                        color = self._bits_to_color(bits)
+                        self._draw_block(frame, x, y, color)
+                
+                # Резерв 1
+                for idx, bits in enumerate(frame_blocks):
+                    y = idx // self.blocks_x
+                    x = idx % self.blocks_x + self.blocks_x
+                    if x < self.blocks_x * 2 and y < self.blocks_y:
+                        color = self._bits_to_color(bits)
+                        self._draw_block(frame, x, y, color)
+                
+                # Резерв 2
+                for idx, bits in enumerate(frame_blocks):
+                    y = idx // self.blocks_x + self.blocks_y
+                    x = idx % self.blocks_x
+                    if x < self.blocks_x and y < self.blocks_y * 2:
+                        color = self._bits_to_color(bits)
+                        self._draw_block(frame, x, y, color)
+                
+                # Сохраняем кадр
                 frame_file = os.path.join(temp_dir, f"frame_{frame_num:05d}.png")
-                frame = cv2.imread(frame_file)
-                if frame is not None:
-                    out.write(frame)
-            out.release()
-        
-        # Удаляем временные файлы
-        shutil.rmtree(temp_dir)
-        print("🧹 Временные файлы удалены")
+                cv2.imwrite(frame_file, frame)
+            
+            # Создаем защитные кадры (синий фон)
+            print("\n🛡️  Создание защитных кадров...")
+            for i in range(5):
+                frame_num = frames_needed - 5 + i
+                frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
+                frame = self._draw_markers(frame)
+                for y in range(self.blocks_y * 2):
+                    for x in range(self.blocks_x * 2):
+                        self._draw_block(frame, x, y, (255, 0, 0))
+                frame_file = os.path.join(temp_dir, f"frame_{frame_num:05d}.png")
+                cv2.imwrite(frame_file, frame)
+                print(f"  🟦 Защитный кадр {i+1}/5")
+            
+            # Конвертируем в MP4
+            print("\n🎞️  Конвертация в MP4...")
+            
+            try:
+                subprocess.run(['ffmpeg', '-version'], capture_output=True, check=True)
+                
+                cmd = [
+                    'ffmpeg',
+                    '-framerate', str(self.fps),
+                    '-i', os.path.join(temp_dir, 'frame_%05d.png'),
+                    '-c:v', 'libx264',
+                    '-preset', 'slow',
+                    '-crf', '23',
+                    '-pix_fmt', 'yuv420p',
+                    '-an',
+                    '-movflags', '+faststart',
+                    '-y',
+                    output_file
+                ]
+                
+                subprocess.run(cmd, check=True, capture_output=True)
+                print("✅ FFmpeg конвертация успешна")
+                
+            except (subprocess.CalledProcessError, FileNotFoundError):
+                print("⚠️ FFmpeg не доступен, использую OpenCV...")
+                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
+                out = cv2.VideoWriter(output_file, fourcc, self.fps, (self.width, self.height))
+                
+                for frame_num in range(frames_needed):
+                    frame_file = os.path.join(temp_dir, f"frame_{frame_num:05d}.png")
+                    frame = cv2.imread(frame_file)
+                    if frame is not None:
+                        out.write(frame)
+                out.release()
+            
+        finally:
+            # Удаляем временные файлы
+            shutil.rmtree(temp_dir, ignore_errors=True)
+            print("🧹 Временные файлы удалены")
         
         if os.path.exists(output_file):
             size = os.path.getsize(output_file)
@@ -282,8 +329,11 @@ class YouTubeDecoder:
         self.spacing = 4
         self.marker_size = 80
         
-        # Ключ шифрования
-        self.key = key
+        # Ключ шифрования (SHA-256 hash)
+        if key and str(key).strip():
+            self.key = hashlib.sha256(str(key).encode()).digest()
+        else:
+            self.key = None
         
         # 16 цветов
         self.colors = {
@@ -342,14 +392,12 @@ class YouTubeDecoder:
         if not self.key:
             return data
         
-        key_bytes = self.key.encode()
         result = bytearray()
-        
+        key_len = len(self.key)
         for i, byte in enumerate(data):
-            key_byte = key_bytes[i % len(key_bytes)]
-            result.append(byte ^ key_byte)
+            result.append(byte ^ self.key[i % key_len])
         
-        return result
+        return bytes(result)
     
     def _color_to_bits_fast(self, color):
         """Оптимизированный поиск цвета"""
@@ -406,7 +454,7 @@ class YouTubeDecoder:
                 try:
                     byte = int(byte_str, 2)
                     bytes_data.append(byte)
-                except:
+                except ValueError:
                     bytes_data.append(0)
         
         return bytes_data
@@ -554,7 +602,7 @@ class YouTubeDecoder:
 
 
 def read_key_from_file(key_file='key.txt'):
-    """Читает ключ из файла key.txt"""
+    """Читает ключ из файла"""
     try:
         if os.path.exists(key_file):
             with open(key_file, 'r', encoding='utf-8') as f:
@@ -566,45 +614,102 @@ def read_key_from_file(key_file='key.txt'):
                     print(f"⚠️ Файл {key_file} пуст")
         else:
             print(f"ℹ️ Файл {key_file} не найден, шифрование не используется")
-    except Exception as e:
+    except IOError as e:
         print(f"⚠️ Ошибка чтения ключа: {e}")
     
     return None
 
 
+def resolve_key(args):
+    """Определяет ключ шифрования по приоритету:
+      1. --key TEXT       — ключ прямо в командной строке
+      2. --key-file PATH  — путь к файлу с ключом
+      3. key.txt рядом со скриптом (обратная совместимость)
+    """
+    if args.key:
+        print("🔑 Используется ключ из аргумента --key")
+        return args.key
+
+    if args.key_file:
+        key = read_key_from_file(args.key_file)
+        if key is None:
+            print(f"❌ Не удалось прочитать ключ из файла: {args.key_file}")
+            sys.exit(1)
+        return key
+
+    # Фолбэк: ищем key.txt рядом со скриптом (старое поведение)
+    return read_key_from_file()
+
+
+def _add_key_args(subparser):
+    """Добавляет аргументы шифрования в подкоманду."""
+    group = subparser.add_mutually_exclusive_group()
+    group.add_argument(
+        '--key',
+        metavar='ТЕКСТ',
+        help='Ключ шифрования в виде строки'
+    )
+    group.add_argument(
+        '--key-file',
+        metavar='ПУТЬ',
+        help='Путь к файлу с ключом шифрования'
+    )
+
+
 def main():
-    if len(sys.argv) < 2:
-        print("\n" + "="*60)
-        print("🎥 YouTube File Storage (6 FPS)")
-        print("="*60)
-        print("\nИспользование:")
-        print("  encode <файл> [output.mp4]  - закодировать файл")
-        print("  decode <видео> [папка]      - декодировать видео")
-        print("\nХарактеристики:")
-        print("  • Частота кадров: 6 FPS")
-        print("  • Масштабирование к 1920x1080")
-        print("  • Маркер конца данных")
-        print("  • 5 защитных кадров")
-        print("\nШифрование:")
-        print("  • Для шифрования создайте key.txt с ключом")
-        return
-    
-    # Читаем ключ из файла
-    key = read_key_from_file()
-    
-    if sys.argv[1] == "encode":
+    parser = argparse.ArgumentParser(
+        prog='coder.py',
+        description='🎥 YouTube File Storage (6 FPS) — кодирование файлов в видео',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Примеры:
+  # Кодирование без шифрования
+  python coder.py encode file.zip output.mp4
+
+  # Кодирование с ключом прямо в командной строке
+  python coder.py encode file.zip output.mp4 --key "mysecretpassword"
+
+  # Кодирование с ключом из файла
+  python coder.py encode file.zip output.mp4 --key-file /path/to/key.txt
+
+  # Декодирование с ключом прямо в командной строке
+  python coder.py decode output.mp4 --key "mysecretpassword"
+
+  # Декодирование с ключом из файла
+  python coder.py decode output.mp4 --key-file /path/to/key.txt
+
+  # Если key.txt лежит рядом со скриптом — ключ подхватится автоматически
+  python coder.py decode output.mp4
+        """
+    )
+
+    subparsers = parser.add_subparsers(dest='command', metavar='КОМАНДА')
+    subparsers.required = True
+
+    # --- encode ---
+    enc = subparsers.add_parser('encode', help='Закодировать файл в видео')
+    enc.add_argument('input_file', metavar='ФАЙЛ', help='Путь к файлу для кодирования')
+    enc.add_argument('output_file', metavar='ВИДЕО', nargs='?', default='output.mp4',
+                     help='Имя выходного MP4-файла (по умолч.: output.mp4)')
+    _add_key_args(enc)
+
+    # --- decode ---
+    dec = subparsers.add_parser('decode', help='Декодировать видео обратно в файл')
+    dec.add_argument('video_file', metavar='ВИДЕО', help='Путь к MP4-файлу для декодирования')
+    dec.add_argument('output_dir', metavar='ПАПКА', nargs='?', default='.',
+                     help='Папка для сохранения результата (по умолч.: текущая)')
+    _add_key_args(dec)
+
+    args = parser.parse_args()
+    key = resolve_key(args)
+
+    if args.command == 'encode':
         encoder = YouTubeEncoder(key)
-        input_file = sys.argv[2]
-        output = sys.argv[3] if len(sys.argv) > 3 else "output.mp4"
-        encoder.encode(input_file, output)
-        
-    elif sys.argv[1] == "decode":
+        encoder.encode(args.input_file, args.output_file)
+
+    elif args.command == 'decode':
         decoder = YouTubeDecoder(key)
-        video_file = sys.argv[2]
-        output_dir = sys.argv[3] if len(sys.argv) > 3 else "."
-        decoder.decode(video_file, output_dir)
-    else:
-        print(f"❌ Неизвестная команда: {sys.argv[1]}")
+        decoder.decode(args.video_file, args.output_dir)
 
 
 if __name__ == "__main__":
