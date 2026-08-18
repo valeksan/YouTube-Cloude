@@ -63,6 +63,9 @@ python coder.py encode secret.zip video.mp4 --format ytv2
 
 # With interlacing (better YouTube quality)
 python coder.py encode secret.zip video.mp4 --interlace
+
+# Override max file size (default: 100 MB for YTV1, 500 MB for YTV2)
+python coder.py encode big.iso video.mp4 --max-size 200
 ```
 
 ### Decode a Video
@@ -98,7 +101,8 @@ python gui.py
 | Blocks/frame | 2,852 | 24,244 |
 | FPS | 6 | 15 |
 | **Density** | **1×** | **21.3×** |
-| Max file | ~100 MB | ~100 MB |
+| Max file (default) | 100 MB (~3.4h video) | 500 MB (~48 min video) |
+| Max file (override) | `--max-size 200` | `--max-size 200` |
 
 ## Project Structure
 
