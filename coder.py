@@ -1,7 +1,8 @@
 # youtube_storage_fixed.py
-# Improvements based on work by @Hinderchik and @IvanSCP
+# Improvements based on work by @Hinderchik, @IvanSCP, and @sosatel30000
 # See: https://github.com/Hinderchik/YouTube-Cloude-Fork
 #      https://github.com/IvanSCP/YouTube-Cloude
+#      https://github.com/sosatel30000/YouTube-Cloude
 import cv2
 import numpy as np
 import os
@@ -14,10 +15,11 @@ import re
 import hashlib
 import argparse
 from pathlib import Path
+from typing import Optional, Callable
 from collections import Counter
 
 class YouTubeEncoder:
-    def __init__(self, key=None):
+    def __init__(self, key: Optional[str] = None) -> None:
         self.width = 1920
         self.height = 1080
         self.fps = 6  # ИЗМЕНЕНО: теперь 6 кадров в секунду
@@ -76,7 +78,7 @@ class YouTubeEncoder:
         print(f"🎞️  FPS: {self.fps}")
         print(f"🔐 Шифрование: {'ВКЛ' if self.use_encryption else 'ВЫКЛ'}")
     
-    def _encrypt_data(self, data):
+    def _encrypt_data(self, data: bytes) -> bytes:
         """XOR шифрование с ключом"""
         if not self.use_encryption:
             return data
@@ -88,7 +90,7 @@ class YouTubeEncoder:
         
         return bytes(result)
     
-    def _sanitize_filename(self, filename):
+    def _sanitize_filename(self, filename: str) -> str:
         """Очищает имя файла от опасных символов и расширений"""
         name = Path(filename).name
         name = re.sub(r'[^a-zA-Z0-9._-]', '_', name)
@@ -99,7 +101,7 @@ class YouTubeEncoder:
                 name = f"{parts[0]}.bin"
         return name or "file.bin"
     
-    def _validate_input_file(self, filepath):
+    def _validate_input_file(self, filepath: str) -> Path:
         """Проверяет входной файл: существование, тип, размер"""
         path = Path(filepath).resolve()
         if not path.exists():
@@ -112,7 +114,7 @@ class YouTubeEncoder:
             raise ValueError("Файл пуст")
         return path
     
-    def _draw_markers(self, frame):
+    def _draw_markers(self, frame: np.ndarray) -> np.ndarray:
         """Рисует маркеры по углам (loop вместо 8 копипаст)"""
         for x, y in [(0, 0), (self.width - self.marker_size, 0),
                      (0, self.height - self.marker_size),
@@ -121,7 +123,7 @@ class YouTubeEncoder:
             cv2.rectangle(frame, (x, y), (x + self.marker_size, y + self.marker_size), (0, 0, 0), 2)
         return frame
     
-    def _draw_block(self, frame, x, y, color):
+    def _draw_block(self, frame: np.ndarray, x: int, y: int, color: tuple) -> bool:
         """Рисует один блок"""
         x1 = self.marker_size + x * (self.block_width + self.spacing)
         y1 = self.marker_size + y * (self.block_height + self.spacing)
@@ -135,13 +137,13 @@ class YouTubeEncoder:
         cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), 1)
         return True
     
-    def _bits_to_color(self, bits):
+    def _bits_to_color(self, bits: str) -> tuple:
         """4 бита -> цвет"""
         while len(bits) < 4:
             bits = '0' + bits
         return self.colors.get(bits, (255, 0, 0))
     
-    def _data_to_blocks(self, data):
+    def _data_to_blocks(self, data: bytes) -> list:
         """Конвертирует данные в 4-битные блоки"""
         all_bits = []
         for byte in data:
@@ -154,7 +156,8 @@ class YouTubeEncoder:
         blocks = [''.join(all_bits[i:i+4]) for i in range(0, len(all_bits), 4)]
         return blocks
     
-    def encode(self, input_file, output_file="output.mp4"):
+    def encode(self, input_file: str, output_file: str = "output.mp4",
+               progress_callback: Optional[Callable[[int, int], None]] = None) -> bool:
         """Кодирует файл в видео с опциональным шифрованием"""
         
         print("\n📤 КОДИРОВАНИЕ ФАЙЛА")
@@ -220,6 +223,8 @@ class YouTubeEncoder:
         try:
             # Создаем кадры
             for frame_num in range(frames_needed - 5):
+                if progress_callback:
+                    progress_callback(frame_num + 1, frames_needed)
                 print(f"\n🖼️  Кадр {frame_num + 1}/{frames_needed}")
                 
                 frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
@@ -321,7 +326,7 @@ class YouTubeEncoder:
 
 
 class YouTubeDecoder:
-    def __init__(self, key=None):
+    def __init__(self, key: Optional[str] = None) -> None:
         self.width = 1920
         self.height = 1080
         self.block_height = 16
@@ -387,7 +392,7 @@ class YouTubeDecoder:
                 cy = self.marker_size + y * (self.block_height + self.spacing) + self.block_height // 2
                 self.block_coords.append((cx, cy))
     
-    def _decrypt_data(self, data):
+    def _decrypt_data(self, data: bytes) -> bytes:
         """XOR дешифрование с ключом"""
         if not self.key:
             return data
@@ -399,7 +404,7 @@ class YouTubeDecoder:
         
         return bytes(result)
     
-    def _color_to_bits_fast(self, color):
+    def _color_to_bits_fast(self, color: np.ndarray) -> str:
         """Оптимизированный поиск цвета"""
         color_key = (color[0], color[1], color[2])
         
@@ -423,8 +428,8 @@ class YouTubeDecoder:
         self.color_cache[color_key] = result
         return result
     
-    def decode_frame_fast(self, frame):
-        """Быстрое декодирование одного кадра с масштабированием"""
+    def decode_frame_fast(self, frame: np.ndarray) -> list:
+        """Быстрое декодирование одного кадра с region-sampling"""
         # Принудительное масштабирование к оригинальному размеру
         if frame.shape[1] != self.width or frame.shape[0] != self.height:
             frame = cv2.resize(frame, (self.width, self.height), 
@@ -435,15 +440,20 @@ class YouTubeDecoder:
         
         for cx, cy in self.block_coords:
             if cx < w and cy < h:
-                color = frame[cy, cx]
-                bits = self._color_to_bits_fast(color)
+                # Region sampling: берём среднее по области 5x5 вместо одного пикселя
+                # Устойчивее к артефактам сжатия YouTube
+                x1, y1 = max(0, cx - 2), max(0, cy - 2)
+                x2, y2 = min(w, cx + 3), min(h, cy + 3)
+                region = frame[y1:y2, x1:x2]
+                avg_color = region.mean(axis=(0, 1))
+                bits = self._color_to_bits_fast(avg_color)
                 blocks.append(bits)
             else:
                 blocks.append('0000')
         
         return blocks
     
-    def _blocks_to_bytes(self, blocks):
+    def _blocks_to_bytes(self, blocks: list) -> bytes:
         """4-битные блоки -> байты"""
         all_bits = ''.join(blocks)
         bytes_data = bytearray()
@@ -459,7 +469,7 @@ class YouTubeDecoder:
         
         return bytes_data
     
-    def _find_eof_marker(self, data):
+    def _find_eof_marker(self, data: bytes) -> int:
         """Поиск маркера конца █████... в данных"""
         eof_bytes = b'\xe2\x96\x88' * 64
         
@@ -468,13 +478,14 @@ class YouTubeDecoder:
                 return i
         return -1
     
-    def decode(self, video_file, output_dir='.'):
+    def decode(self, video_file: str, output_dir: str = '.',
+               progress_callback: Optional[Callable[[int, int], None]] = None) -> bool:
         """Декодирует видео"""
         
         print("\n📥 ДЕКОДИРОВАНИЕ ВИДЕО")
         print("-" * 40)
         
-        if not os.path.exists(video_file):
+        if not Path(video_file).exists():
             print(f"❌ Файл не найден: {video_file}")
             return False
         
@@ -502,6 +513,9 @@ class YouTubeDecoder:
         frames_processed = 0
         
         for frame_num in range(total_frames):
+            if progress_callback:
+                progress_callback(frame_num + 1, total_frames)
+            
             ret, frame = cap.read()
             if not ret:
                 break
