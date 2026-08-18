@@ -118,8 +118,13 @@ DANGEROUS_EXTENSIONS: set[str] = {
     '.exe', '.bat', '.sh', '.py', '.js', '.dll', '.so', '.com',
 }
 
-# ── Max file size (100 MB) ─────────────────────────────────────────────────
-MAX_FILE_SIZE: int = 100 * 1024 * 1024
+# ── Max file size defaults (based on format density) ────────────────────────
+# YTV1: 100 MB → ~3.4h video. YTV2: 500 MB → ~48 min video.
+MAX_FILE_SIZES: dict[str, int] = {
+    'ytv1': 100 * 1024 * 1024,   # 100 MB
+    'ytv2': 500 * 1024 * 1024,   # 500 MB
+}
+MAX_FILE_SIZE: int = 100 * 1024 * 1024  # fallback for direct callers
 
 
 # ── AES-256-CBC encryption / decryption ─────────────────────────────────────

@@ -19,7 +19,7 @@ import numpy as np
 
 from core import (
     WIDTH, HEIGHT, COLORS, EOF_MARKER, EOF_BYTES,
-    get_format, compute_grid,
+    get_format, compute_grid, MAX_FILE_SIZES,
     encrypt_data, generate_iv, derive_key,
     data_to_blocks, sanitize_filename, validate_input_file,
     crc32_hex, interlace_frame,
@@ -31,10 +31,11 @@ class YouTubeEncoder:
 
     def __init__(self, key: Optional[str] = None,
                  format_name: str = 'ytv1',
-                 interlace: bool = False) -> None:
+                 interlace: bool = False,
+                 max_file_size: Optional[int] = None) -> None:
         self.width = WIDTH
         self.height = HEIGHT
-        self.max_file_size = 100 * 1024 * 1024
+        self.max_file_size = max_file_size or MAX_FILE_SIZES.get(format_name, 100 * 1024 * 1024)
         self.interlace = interlace
 
         # Format-specific parameters
@@ -69,6 +70,7 @@ class YouTubeEncoder:
         print(f"  FPS:  {self.fps}")
         print(f"  Encryption: {'AES-256-CBC' if self.use_encryption else 'OFF'}")
         print(f"  Interlace:  {'ON' if self.interlace else 'OFF'}")
+        print(f"  Max file:   {self.max_file_size / 1024 / 1024:.0f} MB")
 
     # ── Drawing helpers ─────────────────────────────────────────────────
     def draw_markers(self, frame: np.ndarray) -> np.ndarray:

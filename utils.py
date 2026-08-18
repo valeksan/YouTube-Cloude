@@ -73,6 +73,17 @@ def add_interlace_arg(subparser: argparse._SubParsersAction) -> None:  # type: i
     )
 
 
+def add_max_size_arg(subparser: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+    """Add max file size argument to *subparser*."""
+    subparser.add_argument(
+        '--max-size',
+        metavar='MB',
+        type=float,
+        default=None,
+        help='Max input file size in MB (default: 100 for YTV1, 500 for YTV2)',
+    )
+
+
 def main() -> None:
     """CLI entry-point."""
     parser = argparse.ArgumentParser(
@@ -119,6 +130,7 @@ Examples:
     add_key_args(enc)
     add_format_arg(enc)
     add_interlace_arg(enc)
+    add_max_size_arg(enc)
 
     # encode-dir (batch mode)
     enc_dir = subparsers.add_parser(
@@ -137,6 +149,7 @@ Examples:
     add_key_args(enc_dir)
     add_format_arg(enc_dir)
     add_interlace_arg(enc_dir)
+    add_max_size_arg(enc_dir)
 
     # decode
     dec = subparsers.add_parser('decode', help='Decode a video back to a file')
@@ -158,8 +171,10 @@ Examples:
     key = resolve_key(args)
 
     if args.command == 'encode':
+        max_size = int(args.max_size * 1024 * 1024) if args.max_size else None
         encoder = YouTubeEncoder(
             key, format_name=args.format, interlace=args.interlace,
+            max_file_size=max_size,
         )
         encoder.encode(args.input_file, args.output_file)
 
@@ -193,8 +208,10 @@ def _encode_dir(args: argparse.Namespace, key: Optional[str]) -> None:
         return
 
     print(f"Batch encode: {len(files)} file(s) from {input_dir} → {output_dir}")
+    max_size = int(args.max_size * 1024 * 1024) if args.max_size else None
     encoder = YouTubeEncoder(
         key, format_name=args.format, interlace=args.interlace,
+        max_file_size=max_size,
     )
 
     ok_count = 0
