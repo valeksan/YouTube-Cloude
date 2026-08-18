@@ -8,6 +8,7 @@ See: https://github.com/Hinderchik/YouTube-Cloude-Fork
 GUI concepts from @Maksim4081862.
 """
 import argparse
+import os
 import sys
 from typing import Optional
 
@@ -58,7 +59,17 @@ def add_format_arg(subparser: argparse._SubParsersAction) -> None:  # type: igno
         metavar='FMT',
         choices=['ytv1', 'ytv2'],
         default='ytv1',
-        help='Video format: ytv1 (default, 6 FPS) or ytv2 (15 FPS, 125x denser)',
+        help='Video format: ytv1 (default, 6 FPS) or ytv2 (15 FPS, 21x denser)',
+    )
+
+
+def add_interlace_arg(subparser: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+    """Add interlace flag to *subparser*."""
+    subparser.add_argument(
+        '--interlace',
+        action='store_true',
+        default=False,
+        help='Interlace frames for better YouTube compression',
     )
 
 
@@ -73,20 +84,17 @@ Examples:
   # Encode without encryption (YTV1 default)
   python coder.py encode file.zip output.mp4
 
-  # Encode in YTV2 format (125x denser, 15 FPS)
+  # Encode in YTV2 format (21x denser, 15 FPS)
   python coder.py encode file.zip output.mp4 --format ytv2
 
-  # Encode with key on command line
-  python coder.py encode file.zip output.mp4 --key "mysecretpassword"
+  # Encode with interlacing for better YouTube compression
+  python coder.py encode file.zip output.mp4 --interlace
 
-  # Decode with auto-detect format
+  # Encode a whole directory (one video per file)
+  python coder.py encode-dir ./mydata/ ./output/ --format ytv2 --interlace
+
+  # Decode with auto-detect (format + interlace + CRC32)
   python coder.py decode output.mp4
-
-  # Decode with explicit format
-  python coder.py decode output.mp4 --format ytv2
-
-  # Decode with key on command line
-  python coder.py decode output.mp4 --key "mysecretpassword"
 
   # If key.txt is next to the script, it is picked up automatically
   python coder.py decode output.mp4
@@ -110,6 +118,25 @@ Examples:
     )
     add_key_args(enc)
     add_format_arg(enc)
+    add_interlace_arg(enc)
+
+    # encode-dir (batch mode)
+    enc_dir = subparsers.add_parser(
+        'encode-dir', help='Encode all files in a directory'
+    )
+    enc_dir.add_argument(
+        'input_dir', metavar='DIR', help='Directory containing files to encode'
+    )
+    enc_dir.add_argument(
+        'output_dir',
+        metavar='OUTDIR',
+        nargs='?',
+        default='.',
+        help='Output directory for MP4 files (default: current)',
+    )
+    add_key_args(enc_dir)
+    add_format_arg(enc_dir)
+    add_interlace_arg(enc_dir)
 
     # decode
     dec = subparsers.add_parser('decode', help='Decode a video back to a file')
@@ -125,15 +152,58 @@ Examples:
     )
     add_key_args(dec)
     add_format_arg(dec)
+    add_interlace_arg(dec)
 
     args = parser.parse_args()
     key = resolve_key(args)
 
     if args.command == 'encode':
-        encoder = YouTubeEncoder(key, format_name=args.format)
+        encoder = YouTubeEncoder(
+            key, format_name=args.format, interlace=args.interlace,
+        )
         encoder.encode(args.input_file, args.output_file)
 
+    elif args.command == 'encode-dir':
+        _encode_dir(args, key)
+
     elif args.command == 'decode':
-        # Decode auto-detects from video header/frame; --format is a hint
-        decoder = YouTubeDecoder(key, format_name=args.format)
+        decoder = YouTubeDecoder(
+            key, format_name=args.format, interlace=args.interlace,
+        )
         decoder.decode(args.video_file, args.output_dir)
+
+
+def _encode_dir(args: argparse.Namespace, key: Optional[str]) -> None:
+    """Batch-encode all files in *args.input_dir*."""
+    input_dir = args.input_dir
+    output_dir = args.output_dir
+
+    if not os.path.isdir(input_dir):
+        print(f"Error: not a directory: {input_dir}")
+        sys.exit(1)
+
+    os.makedirs(output_dir, exist_ok=True)
+
+    files = sorted(
+        f for f in os.listdir(input_dir)
+        if os.path.isfile(os.path.join(input_dir, f))
+    )
+    if not files:
+        print(f"No files found in {input_dir}")
+        return
+
+    print(f"Batch encode: {len(files)} file(s) from {input_dir} → {output_dir}")
+    encoder = YouTubeEncoder(
+        key, format_name=args.format, interlace=args.interlace,
+    )
+
+    ok_count = 0
+    for i, fname in enumerate(files, 1):
+        src = os.path.join(input_dir, fname)
+        dst = os.path.join(output_dir, os.path.splitext(fname)[0] + '.mp4')
+        print(f"\n--- [{i}/{len(files)}] {fname} ---")
+        if encoder.encode(src, dst):
+            ok_count += 1
+
+    print(f"\n{'='*60}")
+    print(f"Batch complete: {ok_count}/{len(files)} succeeded")

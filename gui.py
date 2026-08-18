@@ -208,12 +208,34 @@ class App(tk.Tk):
     def _build_settings_tab(self) -> None:
         frame = self.settings_tab
 
-        ttk.Label(frame, text="Encryption key (optional):").grid(
+        ttk.Label(frame, text="Video format:").grid(
             row=0, column=0, sticky='w', padx=8, pady=(14, 2)
+        )
+        self.format_var = tk.StringVar(value='ytv1')
+        fmt_frame = ttk.Frame(frame)
+        fmt_frame.grid(row=1, column=0, sticky='w', padx=8)
+        ttk.Radiobutton(
+            fmt_frame, text='YTV1 (6 FPS, standard)',
+            variable=self.format_var, value='ytv1',
+        ).pack(side='left', padx=(0, 16))
+        ttk.Radiobutton(
+            fmt_frame, text='YTV2 (15 FPS, 21x denser)',
+            variable=self.format_var, value='ytv2',
+        ).pack(side='left')
+
+        self.interlace_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            frame,
+            text='Interlace frames (better YouTube compression)',
+            variable=self.interlace_var,
+        ).grid(row=2, column=0, columnspan=2, sticky='w', padx=8, pady=(6, 2))
+
+        ttk.Label(frame, text="Encryption key (optional):").grid(
+            row=3, column=0, sticky='w', padx=8, pady=(14, 2)
         )
         self.key_var = tk.StringVar()
         key_entry = ttk.Entry(frame, textvariable=self.key_var, width=50, show='*')
-        key_entry.grid(row=1, column=0, sticky='we', padx=8)
+        key_entry.grid(row=4, column=0, sticky='we', padx=8)
 
         self.show_key_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
@@ -223,7 +245,7 @@ class App(tk.Tk):
             command=lambda: key_entry.config(
                 show='' if self.show_key_var.get() else '*'
             ),
-        ).grid(row=1, column=1, padx=8)
+        ).grid(row=4, column=1, padx=8)
 
         info = (
             "The key is hashed with SHA-256 before use.\n"
@@ -235,7 +257,7 @@ class App(tk.Tk):
             "  @Maksim4081862 - GUI concepts"
         )
         ttk.Label(frame, text=info, justify='left').grid(
-            row=2, column=0, columnspan=2, sticky='w', padx=12, pady=16
+            row=5, column=0, columnspan=2, sticky='w', padx=12, pady=16
         )
 
         frame.columnconfigure(0, weight=1)
@@ -285,6 +307,8 @@ class App(tk.Tk):
         input_file = self.enc_input_var.get().strip()
         output_file = self.enc_output_var.get().strip() or 'output.mp4'
         key = self.key_var.get().strip() or None
+        fmt = self.format_var.get()
+        interlace = self.interlace_var.get()
 
         if not input_file:
             messagebox.showwarning("Input needed", "Please select a file to encode.")
@@ -296,7 +320,7 @@ class App(tk.Tk):
 
         def _worker() -> None:
             try:
-                encoder = YouTubeEncoder(key)
+                encoder = YouTubeEncoder(key, format_name=fmt, interlace=interlace)
 
                 def _cb(done: int, total: int) -> None:
                     pct = int(done / total * 100) if total else 0
@@ -337,6 +361,7 @@ class App(tk.Tk):
         video_file = self.dec_input_var.get().strip()
         output_dir = self.dec_output_var.get().strip() or '.'
         key = self.key_var.get().strip() or None
+        interlace = self.interlace_var.get()
 
         if not video_file:
             messagebox.showwarning("Input needed", "Please select a video to decode.")
@@ -348,7 +373,7 @@ class App(tk.Tk):
 
         def _worker() -> None:
             try:
-                decoder = YouTubeDecoder(key)
+                decoder = YouTubeDecoder(key, interlace=interlace)
 
                 def _cb(done: int, total: int) -> None:
                     pct = int(done / total * 100) if total else 0

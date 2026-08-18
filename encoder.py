@@ -21,6 +21,7 @@ from core import (
     WIDTH, HEIGHT, COLORS, EOF_MARKER, EOF_BYTES,
     get_format, compute_grid,
     encrypt_data, data_to_blocks, sanitize_filename, validate_input_file,
+    crc32_hex, interlace_frame,
 )
 
 
@@ -28,10 +29,12 @@ class YouTubeEncoder:
     """Encode a file into a video of colour-block frames."""
 
     def __init__(self, key: Optional[str] = None,
-                 format_name: str = 'ytv1') -> None:
+                 format_name: str = 'ytv1',
+                 interlace: bool = False) -> None:
         self.width = WIDTH
         self.height = HEIGHT
         self.max_file_size = 100 * 1024 * 1024
+        self.interlace = interlace
 
         # Format-specific parameters
         fmt = get_format(format_name)
@@ -65,6 +68,7 @@ class YouTubeEncoder:
         print(f"  Grid: {self.blocks_x} x {self.blocks_y} blocks per region")
         print(f"  FPS:  {self.fps}")
         print(f"  Encryption: {'ON' if self.use_encryption else 'OFF'}")
+        print(f"  Interlace:  {'ON' if self.interlace else 'OFF'}")
 
     # ── Drawing helpers ─────────────────────────────────────────────────
     def draw_markers(self, frame: np.ndarray) -> np.ndarray:
@@ -153,8 +157,11 @@ class YouTubeEncoder:
         else:
             encrypted_data = data
 
-        # Header: includes format name for auto-detection
-        header = f"FORMAT:{self.format_name}:FILE:{original_filename}:SIZE:{len(data)}|"
+        # CRC32 of encrypted data for integrity check
+        data_crc = crc32_hex(encrypted_data)
+
+        # Header: FORMAT:YTV2:FILE:name:SIZE:123:CRC:abcdef12|
+        header = f"FORMAT:{self.format_name}:FILE:{original_filename}:SIZE:{len(data)}:CRC:{data_crc}|"
         try:
             header_bytes = header.encode('latin-1')
         except UnicodeEncodeError:
@@ -215,6 +222,8 @@ class YouTubeEncoder:
                         self.draw_block(frame, x, y, color)
 
                 frame_file = os.path.join(temp_dir, f"frame_{frame_num:05d}.png")
+                if self.interlace:
+                    frame = interlace_frame(frame)
                 cv2.imwrite(frame_file, frame)
 
             # Guard frames (blue)

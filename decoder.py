@@ -18,6 +18,7 @@ from core import (
     WIDTH, HEIGHT, COLORS, EOF_BYTES,
     get_format, compute_grid, detect_format,
     decrypt_data, blocks_to_bytes, data_to_blocks,
+    verify_crc32, deinterlace_frame,
 )
 
 
@@ -25,11 +26,13 @@ class YouTubeDecoder:
     """Decode a colour-block video back into the original file."""
 
     def __init__(self, key: Optional[str] = None,
-                 format_name: Optional[str] = None) -> None:
+                 format_name: Optional[str] = None,
+                 interlace: bool = False) -> None:
         self.width = WIDTH
         self.height = HEIGHT
         self.format_name = format_name  # None = auto-detect from video
         self._format_configured = False
+        self.interlace = interlace
 
         import hashlib
         if key and str(key).strip():
@@ -145,6 +148,8 @@ class YouTubeDecoder:
                 (self.width, self.height),
                 interpolation=cv2.INTER_NEAREST,
             )
+        if self.interlace:
+            frame = deinterlace_frame(frame)
 
         blocks: list[str] = []
         h, w = frame.shape[:2]
@@ -272,20 +277,24 @@ class YouTubeDecoder:
         else:
             print("  Warning: EOF marker not found")
 
-        # Parse header — supports both:
-        #   New: FORMAT:YTV1:FILE:name:SIZE:123|
-        #   Old: FILE:name:SIZE:123|  (backward compat)
+        # Parse header — supports:
+        #   New+ CRC: FORMAT:YTV2:FILE:name:SIZE:123:CRC:abcdef12|
+        #   New:      FORMAT:YTV2:FILE:name:SIZE:123|
+        #   Old:      FILE:name:SIZE:123|  (backward compat)
         data_str = bytes_data[:1000].decode('latin-1', errors='ignore')
+        pattern_crc = r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):CRC:([0-9a-fA-F]{8})\|'
         pattern_new = r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+)\|'
         pattern_old = r'FILE:([^:]+):SIZE:(\d+)\|'
 
-        match = re.search(pattern_new, data_str)
+        expected_crc: Optional[str] = None
+
+        match = re.search(pattern_crc, data_str)
         if match:
             header_format = match.group(1)
             filename = match.group(2)
             filesize = int(match.group(3))
+            expected_crc = match.group(4).lower()
             header_str = match.group(0)
-            # Auto-configure if decoder didn't know format yet
             if not self._format_configured:
                 try:
                     self._configure_format(get_format(header_format))
@@ -293,24 +302,38 @@ class YouTubeDecoder:
                 except ValueError:
                     print(f"  Warning: unknown format '{header_format}', using defaults")
         else:
-            match = re.search(pattern_old, data_str)
+            match = re.search(pattern_new, data_str)
             if match:
-                filename = match.group(1)
-                filesize = int(match.group(2))
+                header_format = match.group(1)
+                filename = match.group(2)
+                filesize = int(match.group(3))
                 header_str = match.group(0)
-                # Old format without FORMAT: field → assume YTV1
                 if not self._format_configured:
-                    self._configure_format(get_format('ytv1'))
-                    print("  Auto-detected format: YTV1 (legacy header)")
+                    try:
+                        self._configure_format(get_format(header_format))
+                        print(f"  Auto-detected format: {self.format_name}")
+                    except ValueError:
+                        print(f"  Warning: unknown format '{header_format}', using defaults")
             else:
-                print("  Error: header not found")
-                output_path = os.path.join(output_dir, "decoded_data.bin")
-                with open(output_path, 'wb') as f:
-                    f.write(bytes_data)
-                print(f"\n  Raw data saved: {output_path}")
-                return False
+                match = re.search(pattern_old, data_str)
+                if match:
+                    filename = match.group(1)
+                    filesize = int(match.group(2))
+                    header_str = match.group(0)
+                    if not self._format_configured:
+                        self._configure_format(get_format('ytv1'))
+                        print("  Auto-detected format: YTV1 (legacy header)")
+                else:
+                    print("  Error: header not found")
+                    output_path = os.path.join(output_dir, "decoded_data.bin")
+                    with open(output_path, 'wb') as f:
+                        f.write(bytes_data)
+                    print(f"\n  Raw data saved: {output_path}")
+                    return False
 
         print(f"\n  Header found: {filename}, size: {filesize} bytes")
+        if expected_crc:
+            print(f"  CRC32 expected: {expected_crc}")
 
         header_bytes_enc = header_str.encode('latin-1')
         header_pos = bytes_data.find(header_bytes_enc)
@@ -345,6 +368,12 @@ class YouTubeDecoder:
                 print("  Size matches original")
             else:
                 print(f"  Size mismatch: {len(file_data)} != {filesize}")
+
+            if expected_crc:
+                if verify_crc32(encrypted_data, expected_crc):
+                    print("  CRC32 verified OK")
+                else:
+                    print(f"  WARNING: CRC32 MISMATCH — data may be corrupted!")
 
             return True
 

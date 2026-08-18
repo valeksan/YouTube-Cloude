@@ -7,6 +7,7 @@ See: https://github.com/Hinderchik/YouTube-Cloude-Fork
      https://github.com/sosatel30000/YouTube-Cloude
 GUI concepts from @Maksim4081862.
 """
+import zlib
 from pathlib import Path
 from typing import Optional
 
@@ -208,3 +209,45 @@ def read_key_from_file(key_file: str = 'key.txt') -> Optional[str]:
     except IOError as e:
         print(f"Warning: could not read key file: {e}")
     return None
+
+
+# ── CRC32 helpers ──────────────────────────────────────────────────────────
+def crc32_hex(data: bytes) -> str:
+    """Return CRC32 of *data* as an 8-char lowercase hex string."""
+    return format(zlib.crc32(data) & 0xFFFFFFFF, '08x')
+
+
+def verify_crc32(data: bytes, expected_hex: str) -> bool:
+    """Return *True* if CRC32 of *data* matches *expected_hex*."""
+    return crc32_hex(data) == expected_hex.lower()
+
+
+# ── Interlacing (better YouTube compression) ───────────────────────────────
+def interlace_frame(frame) -> object:
+    """Interlace a frame: alternate rows from top and bottom halves.
+
+    YouTube's H.264 encoder compresses better when adjacent rows are
+    less correlated. Interlacing breaks spatial locality → less blocking.
+    """
+    import numpy as np
+    h = frame.shape[0]
+    mid = h // 2
+    top = frame[:mid]      # rows 0..mid-1
+    bot = frame[mid:mid + mid]  # rows mid..2*mid-1 (mirror pad if odd)
+    out = np.empty_like(frame)
+    out[0::2] = top        # even rows from top half
+    out[1::2] = bot        # odd rows from bottom half
+    return out
+
+
+def deinterlace_frame(frame) -> object:
+    """Reverse the interlace applied by ``interlace_frame``."""
+    import numpy as np
+    h = frame.shape[0]
+    mid = h // 2
+    top = frame[0::2][:mid]  # even rows → top half
+    bot = frame[1::2][:mid]  # odd rows → bottom half
+    out = np.empty_like(frame)
+    out[:mid] = top
+    out[mid:mid + len(bot)] = bot
+    return out
