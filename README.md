@@ -147,17 +147,16 @@ This project builds on the work of:
 - [YouTube-Cloude](https://github.com/IvanSCP/YouTube-Cloude) — @IvanSCP's CLI improvements
 - [YouTube-Cloud-GUI](https://github.com/Maksim4081862/YouTube-Cloud-GUI) — @Maksim4081862's GUI
 
-## How Contribute
+## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request.
 
-```bash
-git clone https://github.com/valeksan/YouTube-Cloude.git
-cd YouTube-Cloude
-pip install opencv-python numpy
-python coder.py encode test.txt test.mp4
-python coder.py decode test.mp4
-```
+1. Fork the repository
+2. Create a feature branch (`git checkout -b feature/my-feature`)
+3. Make your changes
+4. Test: `python coder.py encode test.txt test.mp4 && python coder.py decode test.mp4`
+5. Commit and push
+6. Open a Pull Request
 
 ## License
 
