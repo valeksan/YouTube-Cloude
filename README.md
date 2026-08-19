@@ -26,6 +26,42 @@ YouTube → [Decoder] → Coloured blocks → Original file
 
 Each 4-bit chunk of your file is mapped to one of 16 colours and drawn as a block on a 1920×1080 frame. Three redundant copies per frame survive YouTube's compression. An end-of-file marker and header with filename/size ensure reliable recovery.
 
+## ⚠️ Risks and Disclaimer
+
+### Educational and Research Purpose
+
+This project is an **educational and research tool** designed to demonstrate steganographic techniques and highlight potential vulnerabilities in video hosting platforms' content pipelines. It is **not intended for production use, circumvention of platform policies, or any activity that may violate applicable laws or terms of service.**
+
+### YouTube Terms of Service
+
+Uploading steganographic content to YouTube may violate [YouTube's Terms of Service](https://www.youtube.com/t/terms), specifically:
+
+- **Section 5, paragraph 1:** _"You agree not to use the Service to... circumvent, disable, or otherwise interfere with security-related features of the Service."_
+- **Section 5, paragraph 3:** _"You agree not to... engage in any activity that interferes with or disrupts the Service."_
+- **Section 5, paragraph 5:** _"You agree not to... use the Service to store data that is against the law or that violates third-party rights."_
+
+YouTube's automated content processing systems are designed to detect and remove content that violates their policies. Accounts uploading such content may face restrictions, suspension, or termination.
+
+### Legal Considerations
+
+- **Unauthorised data concealment** may violate computer misuse laws in certain jurisdictions (e.g., [Computer Misuse Act 1990](https://www.legislation.gov.uk/ukpga/1990/18/contents) in the UK, [18 U.S.C. § 1030](https://www.law.cornell.edu/uscode/text/18/1030) in the US, [Федеральный закон № 149-ФЗ](http://www.consultant.ru/document/cons_doc_LAW_45536/) in Russia).
+- **Circumvention of platform controls** may constitute a breach of the platform's Terms of Service and could result in civil liability.
+- **Data uploaded to third-party platforms** may be subject to the platform's data retention, monitoring, and disclosure policies.
+
+### Responsible Disclosure
+
+This project was created to **highlight the resilience of steganographic methods against lossy video compression** — a known weakness in content processing pipelines. The author advocates for:
+
+- **Responsible disclosure** of security vulnerabilities to affected platforms
+- **Educational use** to help security researchers understand steganographic attack vectors
+- **Improving platform defences** through awareness of these techniques
+
+### No Warranty
+
+This software is provided **"as is"** without warranty of any kind. The authors and contributors are not responsible for any misuse of this software. Users are solely responsible for ensuring that their use complies with all applicable laws, regulations, and platform terms of service.
+
+**By using this software, you acknowledge that you have read this disclaimer and agree to use the software only for lawful, educational, and research purposes.**
+
 ## Features
 
 - 🔐 **AES-256-CBC encryption** — optional key-based encryption (SHA-256 key derivation, random IV)
