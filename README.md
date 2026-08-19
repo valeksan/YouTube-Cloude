@@ -97,7 +97,7 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 
-# Optional: FFmpeg for better video quality
+# Required: FFmpeg (install separately, not included in pip)
 sudo apt install ffmpeg    # Linux
 brew install ffmpeg        # macOS
 ```
