@@ -30,31 +30,41 @@ Each 4-bit chunk of your file is mapped to one of 16 colours and drawn as a bloc
 
 ### Educational and Research Purpose
 
-This project is an **educational and research tool** designed to demonstrate steganographic techniques and highlight potential vulnerabilities in video hosting platforms' content pipelines. It is **not intended for production use, circumvention of platform policies, or any activity that may violate applicable laws or terms of service.**
+This project is an **educational and research tool** designed to demonstrate steganographic techniques and highlight the resilience of lossy video compression against data embedding. It is **not intended for production use or any activity that may violate applicable laws or terms of service.**
+
+### How This Differs from an Attack
+
+This project does **not** cause direct harm to YouTube or its users:
+
+- It does **not** damage platform infrastructure, servers, or data
+- It does **not** disrupt the service for other users
+- It does **not** bypass security controls, access controls, or authentication
+- It does **not** distribute malware, spam, or harmful content
+
+The concern is **misuse of service** — YouTube is designed for sharing video content with viewers, not for covert data storage. Using it as a "cloud drive" via steganography falls outside the platform's intended purpose.
 
 ### YouTube Terms of Service
 
-Uploading steganographic content to YouTube may violate [YouTube's Terms of Service](https://www.youtube.com/t/terms), specifically:
+Uploading steganographic content to YouTube may be considered a misuse of the platform under [YouTube's Terms of Service](https://www.youtube.com/t/terms):
 
-- **Section 5, paragraph 1:** _"You agree not to use the Service to... circumvent, disable, or otherwise interfere with security-related features of the Service."_
-- **Section 5, paragraph 3:** _"You agree not to... engage in any activity that interferes with or disrupts the Service."_
-- **Section 5, paragraph 5:** _"You agree not to... use the Service to store data that is against the law or that violates third-party rights."_
+- **Section 5, paragraph 1:** YouTube is a platform for sharing video content with an audience, not for data storage or covert communication.
+- **Section 5, paragraph 5:** Using the service in a manner not intended by its design may result in content removal or account restrictions.
 
-YouTube's automated content processing systems are designed to detect and remove content that violates their policies. Accounts uploading such content may face restrictions, suspension, or termination.
+YouTube's automated processing systems may detect and remove content that doesn't align with the platform's purpose. Accounts uploading such content may face restrictions, suspension, or termination.
 
 ### Legal Considerations
 
-- **Unauthorised data concealment** may violate computer misuse laws in certain jurisdictions (e.g., [Computer Misuse Act 1990](https://www.legislation.gov.uk/ukpga/1990/18/contents) in the UK, [18 U.S.C. § 1030](https://www.law.cornell.edu/uscode/text/18/1030) in the US, [Федеральный закон № 149-ФЗ](http://www.consultant.ru/document/cons_doc_LAW_45536/) in Russia).
-- **Circumvention of platform controls** may constitute a breach of the platform's Terms of Service and could result in civil liability.
+- **Unauthorised data concealment** may be interpreted as misuse of computer services in certain jurisdictions (e.g., [Computer Misuse Act 1990](https://www.legislation.gov.uk/ukpga/1990/18/contents) in the UK, [18 U.S.C. § 1030](https://www.law.cornell.edu/uscode/text/18/1030) in the US, [Федеральный закон № 149-ФЗ](http://www.consultant.ru/document/cons_doc_LAW_45536/) in Russia).
+- **Breach of platform ToS** may result in civil liability or account termination.
 - **Data uploaded to third-party platforms** may be subject to the platform's data retention, monitoring, and disclosure policies.
 
 ### Responsible Disclosure
 
-This project was created to **highlight the resilience of steganographic methods against lossy video compression** — a known weakness in content processing pipelines. The author advocates for:
+This project was created to **highlight the resilience of steganographic methods against lossy video compression** — a known property of video codecs that has implications for content processing pipelines. The author advocates for:
 
-- **Responsible disclosure** of security vulnerabilities to affected platforms
-- **Educational use** to help security researchers understand steganographic attack vectors
-- **Improving platform defences** through awareness of these techniques
+- **Responsible disclosure** of potential misuse vectors to affected platforms
+- **Educational use** to help security researchers understand steganographic techniques
+- **Improving platform defences** through awareness of these methods
 
 ### No Warranty
 
