@@ -88,9 +88,15 @@ This software is provided **"as is"** without warranty of any kind. The authors 
 ### Install Dependencies
 
 ```bash
-pip install -r requirements.txt
+# Using Makefile (creates .venv/ automatically)
+make install       # runtime only
+make install-dev   # + pytest for development
+
 # Or manually:
-pip install opencv-python numpy pycryptodome
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -e ".[dev]"
+
 # Optional: FFmpeg for better video quality
 sudo apt install ffmpeg    # Linux
 brew install ffmpeg        # macOS
@@ -100,41 +106,61 @@ brew install ffmpeg        # macOS
 
 ```bash
 # Basic encoding (YTV1 format)
-python coder.py encode secret.zip video.mp4
+youtube-cloude encode secret.zip video.mp4
 
 # With encryption
-python coder.py encode secret.zip video.mp4 --key "my-password"
+youtube-cloude encode secret.zip video.mp4 --key "my-password"
 
 # YTV2 format (21× denser, 15 FPS)
-python coder.py encode secret.zip video.mp4 --format ytv2
+youtube-cloude encode secret.zip video.mp4 --format ytv2
 
 # With interlacing (better YouTube quality)
-python coder.py encode secret.zip video.mp4 --interlace
+youtube-cloude encode secret.zip video.mp4 --interlace
 
 # Override max file size (default: 100 MB for YTV1, 500 MB for YTV2)
-python coder.py encode big.iso video.mp4 --max-size 200
+youtube-cloude encode big.iso video.mp4 --max-size 200
+
+# Or via Makefile
+make run CMD="encode secret.zip video.mp4"
 ```
 
 ### Decode a Video
 
 ```bash
 # Auto-detects format, interlacing, and CRC from the video
-python coder.py decode video.mp4
+youtube-cloude decode video.mp4
 
 # With decryption key
-python coder.py decode video.mp4 --key "my-password"
+youtube-cloude decode video.mp4 --key "my-password"
 ```
 
 ### Batch Encode a Directory
 
 ```bash
-python coder.py encode-dir ./my-data/ ./output/ --format ytv2 --interlace
+youtube-cloude encode-dir ./my-data/ ./output/ --format ytv2 --interlace
 ```
 
 ### Launch GUI
 
 ```bash
-python gui.py
+youtube-cloude-gui
+# Or:
+make gui
+```
+
+### Build Standalone Binary
+
+```bash
+make build          # PyInstaller
+make build-nuitka   # Nuitka (alternative)
+# Output: dist/youtube-cloude
+```
+
+### Run Tests
+
+```bash
+make test           # full suite
+make test-fast      # stop on first failure
 ```
 
 ## Format Comparison
@@ -155,14 +181,21 @@ python gui.py
 
 ```
 YouTube-Cloude/
-├── coder.py        # CLI entry point (backward compatible)
-├── core.py         # Constants, CRC32, interlacing, encryption
-├── encoder.py      # YouTubeEncoder class
-├── decoder.py      # YouTubeDecoder class (auto-detect format)
-├── utils.py        # CLI helpers, argparse
-├── gui.py          # Tkinter GUI (dark theme)
-├── compress.py     # 7z compress/decompress
-└── uploader.py     # YouTube upload (OAuth2) / download (yt-dlp)
+├── src/youtube_cloude/
+│   ├── __init__.py     # Package version (1.0.0)
+│   ├── __main__.py     # CLI entry point (python -m youtube_cloude)
+│   ├── core.py         # Constants, CRC32, interlacing, encryption
+│   ├── encoder.py      # YouTubeEncoder class
+│   ├── decoder.py      # YouTubeDecoder class (auto-detect format)
+│   ├── utils.py        # CLI helpers, argparse
+│   ├── gui.py          # Tkinter GUI (dark theme)
+│   ├── compress.py     # 7z compress/decompress
+│   └── uploader.py     # YouTube upload (OAuth2) / download (yt-dlp)
+├── tests/
+│   └── test_encoder.py # 36 tests (unit + YouTube re-encoding simulation)
+├── pyproject.toml      # PEP 621 metadata, deps, entry points
+├── Makefile            # venv, install, run, build, test, clean
+└── README.md
 ```
 
 ## Encryption
@@ -171,12 +204,12 @@ Files can be encrypted with AES-256-CBC before encoding:
 
 ```bash
 # Key from command line
-python coder.py encode file.zip video.mp4 --key "secret"
+youtube-cloude encode file.zip video.mp4 --key "secret"
 
-# Key from file (auto-loaded if key.txt exists next to coder.py)
+# Key from file (auto-loaded if key.txt exists)
 echo "my-secret-key" > key.txt
-python coder.py encode file.zip video.mp4
-python coder.py decode video.mp4   # key.txt auto-detected
+youtube-cloude encode file.zip video.mp4
+youtube-cloude decode video.mp4   # key.txt auto-detected
 ```
 
 > ⚠️ **Warning:** Without the correct key, the decoded file will be garbage. The key is derived via SHA-256 and each encode generates a unique random IV.
@@ -207,10 +240,11 @@ Contributions are welcome! Please open an issue or submit a pull request.
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Make your changes
-4. Test: `python coder.py encode test.txt test.mp4 && python coder.py decode test.mp4`
-5. Commit and push
-6. Open a Pull Request
+3. Set up dev environment: `make install-dev`
+4. Make your changes
+5. Test: `make test`
+6. Commit and push
+7. Open a Pull Request
 
 ## License
 
