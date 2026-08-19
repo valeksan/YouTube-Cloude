@@ -90,33 +90,39 @@ def main() -> None:
         prog='youtube-cloude',
         description='YouTube File Storage - encode files into video',
         formatter_class=argparse.RawDescriptionHelpFormatter,
-        epilog="""
-Examples:
-  # Encode without encryption (YTV1 default)
-  youtube-cloude encode file.zip output.mp4
+        epilog="""\
+commands:
+  encode       Encode a file into video
+                 --key TEXT | --key-file PATH   encryption
+                 --format ytv1|ytv2             video format
+                 --interlace                    better YouTube quality
+                 --max-size MB                  file size limit
 
-  # Encode in YTV2 format (21x denser, 15 FPS)
-  youtube-cloude encode file.zip output.mp4 --format ytv2
+  encode-dir   Batch-encode all files in a directory
+                 (same flags as encode)
 
-  # Encode with interlacing for better YouTube compression
-  youtube-cloude encode file.zip output.mp4 --interlace
+  decode       Decode a video back to a file
+                 --key TEXT | --key-file PATH   decryption
+                 --format ytv1|ytv2             force format
+                 --interlace                    deinterlace frames
 
-  # Encode a whole directory (one video per file)
-  youtube-cloude encode-dir ./mydata/ ./output/ --format ytv2 --interlace
-
-  # Decode with auto-detect (format + interlace + CRC32)
-  youtube-cloude decode output.mp4
-
-  # If key.txt is next to the script, it is picked up automatically
-  youtube-cloude decode output.mp4
-        """,
+examples:
+  youtube-cloude encode file.zip video.mp4
+  youtube-cloude encode file.zip video.mp4 --format ytv2 --interlace
+  youtube-cloude encode secret.bin video.mp4 --key "my-password"
+  youtube-cloude encode-dir ./data/ ./output/ --format ytv2
+  youtube-cloude decode video.mp4 --key "my-password"
+""",
     )
 
     subparsers = parser.add_subparsers(dest='command', metavar='COMMAND')
     subparsers.required = True
 
     # encode
-    enc = subparsers.add_parser('encode', help='Encode a file into video')
+    enc = subparsers.add_parser(
+        'encode',
+        help='Encode a file into video (--key, --format, --interlace, --max-size)',
+    )
     enc.add_argument(
         'input_file', metavar='FILE', help='Path to the file to encode'
     )
@@ -134,7 +140,8 @@ Examples:
 
     # encode-dir (batch mode)
     enc_dir = subparsers.add_parser(
-        'encode-dir', help='Encode all files in a directory'
+        'encode-dir',
+        help='Batch-encode all files in a directory (--key, --format, --interlace, --max-size)',
     )
     enc_dir.add_argument(
         'input_dir', metavar='DIR', help='Directory containing files to encode'
@@ -152,7 +159,10 @@ Examples:
     add_max_size_arg(enc_dir)
 
     # decode
-    dec = subparsers.add_parser('decode', help='Decode a video back to a file')
+    dec = subparsers.add_parser(
+        'decode',
+        help='Decode a video back to a file (--key, --format, --interlace)',
+    )
     dec.add_argument(
         'video_file', metavar='VIDEO', help='Path to the MP4 to decode'
     )

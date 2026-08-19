@@ -89,8 +89,8 @@ This software is provided **"as is"** without warranty of any kind. The authors 
 
 ```bash
 # Using Makefile (creates .venv/ automatically)
-make install       # runtime only
-make install-dev   # + pytest for development
+make setup         # runtime only
+make setup-dev     # + pytest for development
 
 # Or manually:
 python3 -m venv .venv
@@ -148,12 +148,13 @@ youtube-cloude-gui
 make gui
 ```
 
-### Build Standalone Binary
+### Build Standalone Binaries
 
 ```bash
-make build          # PyInstaller
-make build-nuitka   # Nuitka (alternative)
-# Output: dist/youtube-cloude
+make build          # CLI binary via PyInstaller
+make build-gui      # GUI app via PyInstaller (--windowed, no console)
+make build-nuitka   # CLI binary via Nuitka (alternative)
+# Output: dist/youtube-cloude  or  dist/youtube-cloude-gui
 ```
 
 ### Run Tests
@@ -240,7 +241,7 @@ Contributions are welcome! Please open an issue or submit a pull request.
 
 1. Fork the repository
 2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Set up dev environment: `make install-dev`
+3. Set up dev environment: `make setup-dev`
 4. Make your changes
 5. Test: `make test`
 6. Commit and push
