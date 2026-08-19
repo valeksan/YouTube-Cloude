@@ -7,6 +7,7 @@ Covers:
 - Format auto-detection
 """
 import os
+import subprocess
 import sys
 import tempfile
 import shutil
@@ -281,3 +282,132 @@ class TestEncodeDecodeRoundtrip:
                 restored_data = f.read()
             # With wrong key, data should be different (garbage)
             assert restored_data != data, "Wrong key produced correct data — encryption broken!"
+
+
+# ── YouTube re-encoding simulation ─────────────────────────────────────────
+
+class TestYouTubeReencoding:
+    """Simulate YouTube's re-encoding pipeline and verify decode still works.
+
+    YouTube re-encodes every uploaded video with its own H.264 encoder:
+    - yuv420p pixel format (halves vertical chroma resolution)
+    - H.264 High profile, ~CRF 20-23 equivalent
+    - May change frame rate, resize, or apply denoising
+    - Adds its own moov atom / faststart
+
+    These tests encode a file, then re-encode the video through ffmpeg
+    with YouTube-like settings, and verify the decoder can still recover
+    the original data.
+    """
+
+    @pytest.fixture
+    def tmp_dir(self):
+        d = tempfile.mkdtemp(prefix='ytcloud_yt_')
+        yield d
+        shutil.rmtree(d, ignore_errors=True)
+
+    def _youtube_reencode(self, input_video: str, output_video: str) -> bool:
+        """Re-encode a video through ffmpeg with YouTube-like settings."""
+        cmd = [
+            'ffmpeg', '-y',
+            '-i', input_video,
+            '-c:v', 'libx264',
+            '-preset', 'medium',
+            '-crf', '23',
+            '-pix_fmt', 'yuv420p',
+            '-vf', 'scale=1920:1080:force_original_aspect_ratio=decrease,'
+                    'pad=1920:1080:(ow-iw)/2:(oh-ih)/2',
+            '-r', '30',  # YouTube often re-encodes to 30fps
+            '-an',       # strip audio
+            '-movflags', '+faststart',
+            output_video,
+        ]
+        try:
+            result = subprocess.run(cmd, capture_output=True, timeout=120)
+            return result.returncode == 0
+        except (subprocess.TimeoutExpired, FileNotFoundError):
+            return False
+
+    def _roundtrip_via_youtube(self, data: bytes, filename: str,
+                                format_name: str, key: str = None,
+                                tmp_dir: str = None):
+        """Encode → YouTube re-encode → decode → verify."""
+        from encoder import YouTubeEncoder
+        from decoder import YouTubeDecoder
+
+        if tmp_dir is None:
+            tmp_dir = tempfile.mkdtemp(prefix='ytcloud_ytrt_')
+
+        # Step 1: encode
+        input_path = os.path.join(tmp_dir, filename)
+        with open(input_path, 'wb') as f:
+            f.write(data)
+
+        original_video = os.path.join(tmp_dir, 'original.mp4')
+        encoder = YouTubeEncoder(key=key, format_name=format_name)
+        ok = encoder.encode(input_path, original_video)
+        assert ok, "Encoder failed"
+        assert os.path.exists(original_video)
+
+        # Step 2: simulate YouTube re-encoding
+        reencoded_video = os.path.join(tmp_dir, 'youtube_reencoded.mp4')
+        ok = self._youtube_reencode(original_video, reencoded_video)
+        assert ok, "YouTube re-encode (ffmpeg) failed"
+        assert os.path.exists(reencoded_video)
+
+        # Log the file size difference
+        orig_size = os.path.getsize(original_video)
+        yt_size = os.path.getsize(reencoded_video)
+        ratio = yt_size / orig_size if orig_size > 0 else 0
+        print(f"\n  Original:   {orig_size:,} bytes")
+        print(f"  YT-reencode: {yt_size:,} bytes ({ratio:.2f}x)")
+
+        # Step 3: decode the re-encoded video
+        decode_dir = os.path.join(tmp_dir, 'decoded')
+        os.makedirs(decode_dir)
+        decoder = YouTubeDecoder(key=key)
+        ok = decoder.decode(reencoded_video, decode_dir)
+        assert ok, "Decoder failed on YouTube-reencoded video"
+
+        # Step 4: verify content matches
+        restored_path = os.path.join(decode_dir, filename)
+        assert os.path.exists(restored_path), f"Restored file not found: {restored_path}"
+
+        with open(restored_path, 'rb') as f:
+            restored_data = f.read()
+        assert restored_data == data, (
+            f"Data mismatch after YouTube re-encode! "
+            f"Original {len(data)} bytes, restored {len(restored_data)} bytes"
+        )
+
+    def test_ytv1_text_youtube(self, tmp_dir):
+        """YTV1, plain text, survives YouTube re-encoding."""
+        data = b'YouTube re-encode test - plain text'
+        self._roundtrip_via_youtube(data, 'yt_text.txt', 'ytv1', tmp_dir=tmp_dir)
+
+    def test_ytv1_binary_youtube(self, tmp_dir):
+        """YTV1, random binary data, survives YouTube re-encoding."""
+        data = os.urandom(256)
+        self._roundtrip_via_youtube(data, 'yt_random.bin', 'ytv1', tmp_dir=tmp_dir)
+
+    def test_ytv1_aes_youtube(self, tmp_dir):
+        """YTV1 + AES encryption survives YouTube re-encoding."""
+        data = b'Encrypted data that must survive YouTube'
+        self._roundtrip_via_youtube(data, 'yt_aes.bin', 'ytv1',
+                                    key='youtube-test-key', tmp_dir=tmp_dir)
+
+    def test_ytv2_text_youtube(self, tmp_dir):
+        """YTV2, plain text, survives YouTube re-encoding."""
+        data = b'YTV2 format YouTube re-encode test'
+        self._roundtrip_via_youtube(data, 'yt2_text.txt', 'ytv2', tmp_dir=tmp_dir)
+
+    def test_ytv2_aes_youtube(self, tmp_dir):
+        """YTV2 + AES encryption survives YouTube re-encoding."""
+        data = b'YTV2 encrypted YouTube survival test'
+        self._roundtrip_via_youtube(data, 'yt2_aes.bin', 'ytv2',
+                                    key='ytv2-yt-key', tmp_dir=tmp_dir)
+
+    def test_ytv1_1kb_youtube(self, tmp_dir):
+        """YTV1, 1KB file, survives YouTube re-encoding."""
+        data = os.urandom(1024)
+        self._roundtrip_via_youtube(data, 'yt_1kb.bin', 'ytv1', tmp_dir=tmp_dir)
