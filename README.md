@@ -54,7 +54,7 @@ YouTube's automated processing systems may detect and remove content that doesn'
 
 ### Legal Considerations
 
-- **Unauthorised data concealment** may be interpreted as misuse of computer services in certain jurisdictions (e.g., [Computer Misuse Act 1990](https://www.legislation.gov.uk/ukpga/1990/18/contents) in the UK, [18 U.S.C. § 1030](https://www.law.cornell.edu/uscode/text/18/1030) in the US, [Федеральный закон № 149-ФЗ](http://www.consultant.ru/document/cons_doc_LAW_45536/) in Russia).
+- **Unauthorised data concealment** may be interpreted as misuse of computer services in certain jurisdictions (e.g., [Computer Misuse Act 1990](https://www.legislation.gov.uk/ukpga/1990/18/contents) in the UK, [18 U.S.C. § 1030](https://www.law.cornell.edu/uscode/text/18/1030) in the US).
 - **Breach of platform ToS** may result in civil liability or account termination.
 - **Data uploaded to third-party platforms** may be subject to the platform's data retention, monitoring, and disclosure policies.
 
