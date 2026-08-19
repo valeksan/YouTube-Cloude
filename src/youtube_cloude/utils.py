@@ -12,9 +12,9 @@ import os
 import sys
 from typing import Optional
 
-from core import read_key_from_file
-from encoder import YouTubeEncoder
-from decoder import YouTubeDecoder
+from .core import read_key_from_file
+from .encoder import YouTubeEncoder
+from .decoder import YouTubeDecoder
 
 
 def resolve_key(args: argparse.Namespace) -> Optional[str]:
@@ -87,28 +87,28 @@ def add_max_size_arg(subparser: argparse._SubParsersAction) -> None:  # type: ig
 def main() -> None:
     """CLI entry-point."""
     parser = argparse.ArgumentParser(
-        prog='coder.py',
+        prog='youtube-cloude',
         description='YouTube File Storage - encode files into video',
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
   # Encode without encryption (YTV1 default)
-  python coder.py encode file.zip output.mp4
+  youtube-cloude encode file.zip output.mp4
 
   # Encode in YTV2 format (21x denser, 15 FPS)
-  python coder.py encode file.zip output.mp4 --format ytv2
+  youtube-cloude encode file.zip output.mp4 --format ytv2
 
   # Encode with interlacing for better YouTube compression
-  python coder.py encode file.zip output.mp4 --interlace
+  youtube-cloude encode file.zip output.mp4 --interlace
 
   # Encode a whole directory (one video per file)
-  python coder.py encode-dir ./mydata/ ./output/ --format ytv2 --interlace
+  youtube-cloude encode-dir ./mydata/ ./output/ --format ytv2 --interlace
 
   # Decode with auto-detect (format + interlace + CRC32)
-  python coder.py decode output.mp4
+  youtube-cloude decode output.mp4
 
   # If key.txt is next to the script, it is picked up automatically
-  python coder.py decode output.mp4
+  youtube-cloude decode output.mp4
         """,
     )
 

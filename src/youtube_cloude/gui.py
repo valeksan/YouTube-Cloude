@@ -17,11 +17,8 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 from typing import Optional
 
-# Ensure project modules are importable
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-
-from encoder import YouTubeEncoder  # noqa: E402
-from decoder import YouTubeDecoder  # noqa: E402
+from .encoder import YouTubeEncoder
+from .decoder import YouTubeDecoder
 
 
 # ── Dark theme colours ──────────────────────────────────────────────────────

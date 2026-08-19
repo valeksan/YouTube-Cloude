@@ -1,4 +1,0 @@
-numpy>=1.24
-opencv-python>=4.8
-pycryptodome>=3.19
-pytest>=7.0

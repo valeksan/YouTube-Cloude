@@ -1,0 +1,51 @@
+[build-system]
+requires = ["setuptools>=68.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "youtube-cloude"
+version = "1.0.0"
+description = "Steganographic file storage in YouTube videos — encode files into colour-block video frames"
+readme = "README.md"
+license = {text = "Proprietary — see README.md"}
+requires-python = ">=3.10"
+authors = [
+    {name = "valeksan"},
+]
+keywords = ["steganography", "video", "youtube", "file-hiding", "data-encoding", "covert-channel"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "Intended Audience :: Education",
+    "Topic :: Security :: Cryptography",
+    "Topic :: Multimedia :: Video",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "numpy>=1.24",
+    "opencv-python>=4.8",
+    "pycryptodome>=3.19",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=7.0",
+]
+
+[project.scripts]
+youtube-cloude = "youtube_cloude.utils:main"
+
+[project.gui-scripts]
+youtube-cloude-gui = "youtube_cloude.gui:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+pythonpath = ["src"]

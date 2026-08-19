@@ -7,7 +7,7 @@ See: https://github.com/Hinderchik/YouTube-Cloude-Fork
      https://github.com/sosatel30000/YouTube-Cloude
 GUI concepts from @Maksim4081862.
 """
-from utils import main
+from .utils import main
 
 if __name__ == "__main__":
     main()

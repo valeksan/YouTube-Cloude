@@ -15,10 +15,7 @@ import shutil
 import numpy as np
 import pytest
 
-# Ensure project root is importable
-sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
-
-from core import (
+from youtube_cloude.core import (
     WIDTH, HEIGHT,
     crc32_hex, verify_crc32,
     interlace_frame, deinterlace_frame,
@@ -181,8 +178,8 @@ class TestEncodeDecodeRoundtrip:
     def _roundtrip(self, data: bytes, filename: str, format_name: str,
                     key: str = None, interlace: bool = False, tmp_dir: str = None):
         """Helper: write data → encode → decode → verify."""
-        from encoder import YouTubeEncoder
-        from decoder import YouTubeDecoder
+        from youtube_cloude.encoder import YouTubeEncoder
+        from youtube_cloude.decoder import YouTubeDecoder
 
         if tmp_dir is None:
             tmp_dir = tempfile.mkdtemp(prefix='ytcloud_rt_')
@@ -259,8 +256,8 @@ class TestEncodeDecodeRoundtrip:
 
     def test_wrong_key_gives_garbage(self, tmp_dir):
         """Encoding with key A, decoding with key B should NOT match."""
-        from encoder import YouTubeEncoder
-        from decoder import YouTubeDecoder
+        from youtube_cloude.encoder import YouTubeEncoder
+        from youtube_cloude.decoder import YouTubeDecoder
 
         data = b'Encrypted content'
         input_path = os.path.join(tmp_dir, 'enc.txt')
@@ -332,8 +329,8 @@ class TestYouTubeReencoding:
                                 format_name: str, key: str = None,
                                 tmp_dir: str = None):
         """Encode → YouTube re-encode → decode → verify."""
-        from encoder import YouTubeEncoder
-        from decoder import YouTubeDecoder
+        from youtube_cloude.encoder import YouTubeEncoder
+        from youtube_cloude.decoder import YouTubeDecoder
 
         if tmp_dir is None:
             tmp_dir = tempfile.mkdtemp(prefix='ytcloud_ytrt_')

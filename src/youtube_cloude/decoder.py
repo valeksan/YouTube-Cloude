@@ -14,7 +14,7 @@ from typing import Optional, Callable
 
 import numpy as np
 
-from core import (
+from .core import (
     WIDTH, HEIGHT, COLORS, EOF_BYTES,
     get_format, compute_grid, detect_format,
     decrypt_data, derive_key,
