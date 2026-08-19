@@ -8,6 +8,7 @@
 [![OpenCV](https://img.shields.io/badge/OpenCV-4.x-5C3EE8?logo=opencv&logoColor=white)](https://opencv.org/)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-optional-green)](https://ffmpeg.org/)
 [![License](https://img.shields.io/badge/License-None%20(yet)-red)](#license)
+[![Tests](https://github.com/valeksan/YouTube-Cloude/actions/workflows/test.yml/badge.svg)](https://github.com/valeksan/YouTube-Cloude/actions/workflows/test.yml)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)]()
 
 *Encode any file into a video of colour-block frames, upload to YouTube, and download it back — even if YouTube re-encodes the video.*
