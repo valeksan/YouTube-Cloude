@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# ci-cache-test
 """Tests for YouTube-Cloude encode/decode pipeline.
 
 Covers:
