@@ -41,7 +41,7 @@ build: setup-dev ## Build CLI binary with PyInstaller
 		--hidden-import youtube_cloude.gui \
 		--hidden-import youtube_cloude.uploader \
 		--hidden-import youtube_cloude.compress \
-		src/youtube_cloude/__main__.py
+		src/youtube_cloude/cli.py
 	@echo ""
 	@echo "Binary: dist/youtube-cloude"
 
