@@ -28,7 +28,12 @@ jobs:
           python-version: ${{ matrix.python-version }}
 
       - name: Install ffmpeg
-        run: sudo apt-get install -y --no-install-recommends ffmpeg
+        run: |
+          if ! command -v ffmpeg &>/dev/null; then
+            curl -sL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | \
+              tar -xJ --strip-components=1 -C /usr/local/bin '*/ffmpeg'
+          fi
+          ffmpeg -version | head -1
 
       - name: Install dependencies
         run: |

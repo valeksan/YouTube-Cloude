@@ -115,8 +115,13 @@ class TestAES:
         data = b'secret'
         encrypted = encrypt_data(data, key, iv)
         wrong_key = derive_key('wrong-password')
-        with pytest.raises(Exception):
-            decrypt_data(encrypted, wrong_key, iv)
+        # AES-CBC + unpad may or may not raise depending on garbage bytes.
+        # Verify the decrypted data is NOT the original.
+        try:
+            decrypted = decrypt_data(encrypted, wrong_key, iv)
+            assert decrypted != data, "Wrong key produced correct data — encryption broken!"
+        except Exception:
+            pass  # Raised (bad padding) — also acceptable
 
     def test_deterministic_with_same_iv(self):
         key = derive_key('test')
