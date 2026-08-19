@@ -253,6 +253,13 @@ class YouTubeEncoder:
 
             # Convert to MP4
             print("\n  Converting to MP4...")
+            # Interlaced frames have high-frequency row transitions that
+            # yuv420p chroma subsampling destroys.  Use yuv444p for interlaced
+            # to preserve full colour resolution at block boundaries.
+            pix_fmt = 'yuv444p' if self.interlace else 'yuv420p'
+            crf = '0' if self.interlace else '23'
+            preset = 'ultrafast' if self.interlace else 'slow'
+            print(f"  FFmpeg: CRF {crf}, preset {preset}, pix_fmt {pix_fmt}")
             try:
                 subprocess.run(
                     ['ffmpeg', '-version'],
@@ -264,14 +271,19 @@ class YouTubeEncoder:
                     '-framerate', str(self.fps),
                     '-i', os.path.join(temp_dir, 'frame_%05d.png'),
                     '-c:v', 'libx264',
-                    '-preset', 'slow',
-                    '-crf', '23',
-                    '-pix_fmt', 'yuv420p',
+                    '-preset', preset,
+                    '-crf', crf,
+                    '-pix_fmt', pix_fmt,
+                ]
+                # libx264 needs high444 profile for yuv444p
+                if self.interlace:
+                    cmd.extend(['-profile:v', 'high444', '-level', '4.1'])
+                cmd.extend([
                     '-an',
                     '-movflags', '+faststart',
                     '-y',
                     output_file,
-                ]
+                ])
                 subprocess.run(cmd, check=True, capture_output=True)
                 print("  FFmpeg conversion OK")
             except (subprocess.CalledProcessError, FileNotFoundError):

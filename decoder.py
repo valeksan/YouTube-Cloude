@@ -80,23 +80,44 @@ class YouTubeDecoder:
     def _detect_marker_size(self, frame: np.ndarray) -> int:
         """Detect marker size from the top-left corner of the first frame.
 
-        Scans along the top edge for the transition from white marker to black.
+        Scans the top-left corner for the white marker square.
+        Returns the closest known marker size (80 for YTV1, 16 for YTV2).
         """
         if frame.shape[1] != self.width or frame.shape[0] != self.height:
             frame = cv2.resize(
                 frame, (self.width, self.height), interpolation=cv2.INTER_NEAREST
             )
-        # Scan row y=marker_center, from x=0 rightward
         gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
-        center_y = 40  # sample row
-        for x in range(10, min(200, self.width)):
-            if gray[center_y, x] < 128:  # dark = end of white marker
-                # Markers are square; check vertical too
-                center_x = x // 2
-                for y in range(10, min(200, self.height)):
-                    if gray[y, center_x] < 128:
-                        return x  # approximate marker size
-        return 80  # fallback to YTV1
+
+        # Scan along multiple rows to find where the white marker ends.
+        # Sample several rows in the top half to be robust against
+        # compression artifacts on any single row.
+        scores = []
+        for cy in [20, 30, 40, 50, 60]:
+            for x in range(5, min(200, self.width)):
+                if gray[cy, x] < 128:
+                    scores.append(x)
+                    break
+
+        if not scores:
+            # Fallback: scan column-wise
+            for cx in [20, 30, 40, 50, 60]:
+                for y in range(5, min(200, self.height)):
+                    if gray[y, cx] < 128:
+                        scores.append(y)
+                        break
+
+        if not scores:
+            return 80  # ultimate fallback
+
+        # Use the most common detection value
+        from collections import Counter
+        counter = Counter(scores)
+        raw_size = counter.most_common(1)[0][0]
+
+        # Snap to closest known marker size
+        known = [16, 80]
+        return min(known, key=lambda k: abs(k - raw_size))
 
     def _precompute_coordinates(self) -> None:
         """Precompute centre pixel coordinates for every block."""
@@ -216,6 +237,9 @@ class YouTubeDecoder:
         if not self._format_configured:
             ret, first_frame = cap.read()
             if ret:
+                # Deinterlace first so marker detection sees clean markers
+                if self.interlace:
+                    first_frame = deinterlace_frame(first_frame)
                 detected_ms = self._detect_marker_size(first_frame)
                 print(f"  Detected marker size: {detected_ms}px")
                 self._configure_format(detect_format(detected_ms))
