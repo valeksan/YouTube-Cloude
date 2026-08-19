@@ -29,10 +29,16 @@ jobs:
 
       - name: Install ffmpeg
         run: |
-          if ! command -v ffmpeg &>/dev/null; then
+          if command -v ffmpeg &>/dev/null; then
+            echo "ffmpeg already installed"
+          elif sudo apt-get install -y ffmpeg 2>/dev/null; then
+            echo "ffmpeg installed via apt"
+          else
             curl -sL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | \
               tar -xJ --wildcards --strip-components=1 -C /usr/local/bin '*/ffmpeg'
+            echo "ffmpeg installed via static binary"
           fi
+          ffmpeg -version | head -1
 
       - name: Install dependencies
         run: |
