@@ -178,6 +178,30 @@ make test-fast      # stop on first failure
 | Max file (default) | 100 MB (~3.4h video) | 500 MB (~48 min video) |
 | Max file (override) | `--max-size 200` | `--max-size 200` |
 
+## Benchmark
+
+Test image: generated 513 KB PNG (800×600, geometric shapes + noise). All variants verified with MD5 — **8/8 passed**.
+
+| Variant | Encode | Decode | Video Size | Overhead | Verified |
+|---------|--------|--------|------------|----------|----------|
+| YTV1 | 33.8s | 16.8s | 36.0 MB | 71.8× | YES |
+| YTV1 + AES | 37.3s | 17.3s | 36.1 MB | 72.0× | YES |
+| YTV1 + interlace | 21.6s | 18.1s | 365.6 MB | 729.6× | YES |
+| YTV1 + interlace + AES | 21.4s | 18.3s | 365.7 MB | 729.8× | YES |
+| YTV2 | 16.0s | 19.0s | 18.5 MB | 36.8× | YES |
+| YTV2 + AES | 16.1s | 19.2s | 18.5 MB | 36.9× | YES |
+| YTV2 + interlace | 12.7s | 17.8s | 138.6 MB | 276.5× | YES |
+| YTV2 + interlace + AES | 12.8s | 17.6s | 138.5 MB | 276.4× | YES |
+
+### Key Findings
+
+- **YTV2 is 2× faster to encode** than YTV1 (fewer frames: 21 vs 85)
+- **YTV2 produces 2× smaller video** (higher density, fewer wasted pixels)
+- **AES encryption adds ~0.1–3.5s overhead** — negligible for encode, ~0.5s for decode
+- **Interlace produces 20× larger files** (requires lossless CRF 0 + yuv444p)
+- **Without interlace:** YTV2 is optimal (faster + smaller)
+- **With interlace:** YTV2 is still better (276× vs 730× overhead)
+
 ## Project Structure
 
 ```
