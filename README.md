@@ -206,6 +206,23 @@ Test image: generated 513 KB PNG (800×600, geometric shapes + noise). All varia
 
 ## How Interlace Works
 
+### The Pipeline
+
+```
+Interlace кодирование:     YouTube:              Скачанное:
+┌─────────────────┐   ┌──────────────────┐   ┌──────────────┐
+│ 365 MB lossless │ → │ Re-encode H.264  │ → │ ~5-10 MB     │
+│ yuv444p CRF 0   │   │ yuv420p CRF ~23  │   │ yuv420p      │
+└─────────────────┘   └──────────────────┘   └──────────────┘
+                                              ↓ deinterlace
+                                         ┌──────────────┐
+                                         │ Файл идентичен│
+                                         │ оригиналу!    │
+                                         └──────────────┘
+```
+
+YouTube **убивает** lossless и yuv444p — оставляет lossy H.264. Но данные внутри блоков переживают, потому что interlace уже "спрятал" их между строками. Кодек видит "шумную" картинку и сохраняет detail. При скачивании — deinterlace, и блоки на месте.
+
 ### The Problem
 
 YouTube re-encodes every uploaded video with H.264. This codec uses **chroma subsampling (yuv420p)** which halves vertical color resolution. For our coloured blocks this is catastrophic — the encoder sees sharp colour transitions and "smooths" them, destroying the block data.
