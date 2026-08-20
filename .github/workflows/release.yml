@@ -1,19 +1,53 @@
 name: Release
 
 on:
-  push:
-    tags:
-      - 'v*'
+  # ── Ручной запуск с указанием версии ──
+  workflow_dispatch:
+    inputs:
+      version:
+        description: 'Version (e.g. v1.0.0)'
+        required: true
+        type: string
+      dry_run:
+        description: 'Dry run — build only, do not create tag/release'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: write
 
 env:
   PYTHON_VERSION: '3.12'
+  VERSION: ${{ inputs.version }}
 
 jobs:
+  # ── Validate version format ─────────────────────────────────────────────
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Validate version format
+        run: |
+          VERSION="${{ inputs.version }}"
+          if [[ ! "$VERSION" =~ ^v[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$ ]]; then
+            echo "❌ Invalid version format: $VERSION"
+            echo "   Expected: v1.0.0 or v1.0.0-beta.1"
+            exit 1
+          fi
+          echo "✅ Version: $VERSION"
+
+      - name: Check tag does not exist
+        run: |
+          VERSION="${{ inputs.version }}"
+          if git ls-remote --tags origin | grep -q "refs/tags/$VERSION$"; then
+            echo "❌ Tag $VERSION already exists!"
+            exit 1
+          fi
+          echo "✅ Tag $VERSION is available"
+
   # ── Test first ──────────────────────────────────────────────────────────
   test:
+    needs: validate
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -66,7 +100,7 @@ jobs:
       - name: Install PyInstaller + PySide6
         run: pip install pyinstaller "PySide6>=6.5"
 
-      # ── Linux: install ffmpeg for tests ──
+      # ── ffmpeg per platform ──
       - name: Install ffmpeg (Linux)
         if: runner.os == 'Linux'
         run: |
@@ -75,7 +109,6 @@ jobs:
               tar -xJ --wildcards --strip-components=1 -C /usr/local/bin '*/ffmpeg'
           fi
 
-      # ── Windows: install ffmpeg ──
       - name: Install ffmpeg (Windows)
         if: runner.os == 'Windows'
         run: |
@@ -84,7 +117,6 @@ jobs:
           }
         shell: pwsh
 
-      # ── macOS: install ffmpeg ──
       - name: Install ffmpeg (macOS)
         if: runner.os == 'macOS'
         run: |
@@ -123,10 +155,10 @@ jobs:
             --hidden-import PySide6.QtGui \
             src/youtube_cloude/gui_qt_cli.py
 
-      # ── Rename binaries with artifact suffix ──
+      # ── Rename binaries with version ──
       - name: Rename binaries
         run: |
-          TAG=${GITHUB_REF#refs/tags/}
+          TAG="${{ inputs.version }}"
           if [ "${{ runner.os }}" = "Windows" ]; then
             mv dist/youtube-cloude.exe "dist/youtube-cloude-${TAG}-${{ matrix.artifact }}.exe"
             mv dist/youtube-cloude-gui.exe "dist/youtube-cloude-gui-${TAG}-${{ matrix.artifact }}.exe"
@@ -148,6 +180,7 @@ jobs:
   build-android:
     needs: test
     runs-on: ubuntu-latest
+    continue-on-error: true  # Android build is optional
     steps:
       - uses: actions/checkout@v4
 
@@ -155,7 +188,6 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
-      # ── Install system deps for Buildozer ──
       - name: Install system dependencies
         run: |
           sudo apt-get update -qq
@@ -166,16 +198,13 @@ jobs:
             openjdk-17-jdk unzip wget \
             lld clang
 
-      # ── Install Buildozer ──
       - name: Install Buildozer
-        run: |
-          pip install buildozer cython
+        run: pip install buildozer cython
 
-      # ── Create buildozer.spec ──
       - name: Create buildozer.spec
         run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          cat > buildozer.spec << 'SPEC'
+          TAG="${{ inputs.version }}"
+          cat > buildozer.spec << SPEC
           [app]
           title = YouTube-Cloude
           package.name = youtube_cloude
@@ -192,19 +221,11 @@ jobs:
           android.ndk = 25b
           android.arch = arm64-v8a
           android.accept_sdk_license = True
-          ios.kivy_ios_url = https://github.com/kivy/kivy-ios
-          ios.kivy_ios_branch = master
-          ios.bootstrap_url = https://github.com/kivy/kivy-ios
-          ios.bootstrap_branch = master
           p4a.branch = develop
           SPEC
 
-      # ── Buildozer Android build ──
       - name: Build Android APK
-        run: |
-          TAG=${GITHUB_REF#refs/tags/}
-          sed -i "s/\${TAG}/${TAG}/" buildozer.spec
-          buildozer android debug 2>&1 || true
+        run: buildozer android debug
         timeout-minutes: 60
 
       - name: Upload Android APK
@@ -215,14 +236,28 @@ jobs:
           path: bin/*.apk
           retention-days: 7
 
-  # ── Create GitHub Release ───────────────────────────────────────────────
+  # ── Create tag + release (only if ALL builds succeeded) ────────────────
   release:
     needs: [build-desktop, build-android]
     runs-on: ubuntu-latest
-    if: always() && needs.build-desktop.result == 'success'
+    # Release only if desktop builds succeeded (Android is optional)
+    if: needs.build-desktop.result == 'success'
     steps:
       - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
+      # ── Create git tag (only after successful builds) ──
+      - name: Create tag
+        run: |
+          TAG="${{ inputs.version }}"
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+          git tag -a "$TAG" -m "Release $TAG"
+          git push origin "$TAG"
+          echo "✅ Created tag: $TAG"
+
+      # ── Download all artifacts ──
       - name: Download all artifacts
         uses: actions/download-artifact@v4
         with:
@@ -231,14 +266,16 @@ jobs:
           merge-multiple: true
 
       - name: List artifacts
-        run: find artifacts/ -type f | head -20
+        run: find artifacts/ -type f -exec ls -lh {} \;
 
+      # ── Create GitHub Release ──
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "YouTube-Cloude ${{ github.ref_name }}"
+          name: "YouTube-Cloude ${{ inputs.version }}"
+          tag_name: ${{ inputs.version }}
           body: |
-            ## YouTube-Cloude ${{ github.ref_name }}
+            ## YouTube-Cloude ${{ inputs.version }}
 
             ### Downloads
             | Platform | CLI | GUI |
@@ -263,9 +300,12 @@ jobs:
 
             ### Requirements
             - **CLI**: ffmpeg installed
-            - **GUI (Linux)**: `sudo apt install python3-tk` (tkinter) or PySide6 (included)
+            - **GUI (Linux)**: PySide6 (included in binary)
             - **GUI (Windows/macOS)**: included in binary
             - **Android**: Android 8.0+ (API 24+)
+
+            ### Changes
+            See [commits since last release](https://github.com/${{ github.repository }}/compare/${{ github.event.repository.default_branch }}...${{ inputs.version }}).
           files: artifacts/**/*
           draft: false
           prerelease: false
