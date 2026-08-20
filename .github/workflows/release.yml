@@ -217,25 +217,25 @@ jobs:
         run: |
           TAG="${{ inputs.version }}"
           cat > buildozer.spec << 'SPEC'
-[app]
-title = YouTube-Cloude
-package.name = youtube_cloude
-package.domain = com.valeksan
-source.dir = src
-source.include_exts = py,png,jpg,kv,atlas
-source.main = youtube_cloude.gui_kivy:main
-version = TAGPLACEHOLDER
-requirements = python3,kivy,numpy,opencv,pycryptodome
-orientation = portrait
-fullscreen = 0
-android.permissions = CAMERA,INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
-android.api = 33
-android.minapi = 24
-android.ndk = 25b
-android.archs = arm64-v8a
-android.accept_sdk_license = True
-p4a.branch = develop
-SPEC
+          [app]
+          title = YouTube-Cloude
+          package.name = youtube_cloude
+          package.domain = com.valeksan
+          source.dir = src
+          source.include_exts = py,png,jpg,kv,atlas
+          source.main = youtube_cloude.gui_kivy:main
+          version = TAGPLACEHOLDER
+          requirements = python3,kivy,numpy,opencv,pycryptodome
+          orientation = portrait
+          fullscreen = 0
+          android.permissions = CAMERA,INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
+          android.api = 33
+          android.minapi = 24
+          android.ndk = 25b
+          android.archs = arm64-v8a
+          android.accept_sdk_license = True
+          p4a.branch = develop
+          SPEC
           sed -i "s/TAGPLACEHOLDER/${TAG}/" buildozer.spec
 
       - name: Build Android APK
