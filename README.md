@@ -180,6 +180,8 @@ make test-fast      # stop on first failure
 
 ## Benchmark
 
+**Test system:** AMD Ryzen 5 1600 (6C/12T, 3.2 GHz), 16 GB RAM, Linux 6.12 LTS
+
 Test image: generated 513 KB PNG (800×600, geometric shapes + noise). All variants verified with MD5 — **8/8 passed**.
 
 | Variant | Encode | Decode | Video Size | Overhead | Verified |
@@ -201,6 +203,52 @@ Test image: generated 513 KB PNG (800×600, geometric shapes + noise). All varia
 - **Interlace produces 20× larger files** (requires lossless CRF 0 + yuv444p)
 - **Without interlace:** YTV2 is optimal (faster + smaller)
 - **With interlace:** YTV2 is still better (276× vs 730× overhead)
+
+## How Interlace Works
+
+### The Problem
+
+YouTube re-encodes every uploaded video with H.264. This codec uses **chroma subsampling (yuv420p)** which halves vertical color resolution. For our coloured blocks this is catastrophic — the encoder sees sharp colour transitions and "smooths" them, destroying the block data.
+
+```
+Original blocks:     After yuv420p subsampling:
+┌───┬───┬───┐        ┌───┬───┬───┐
+│RED│GRN│BLU│   →    │RED│GRN│BLU│  ← looks ok...
+├───┼───┼───┤        ├───┼───┼───┤
+│BLU│RED│GRN│        │???│???│???│  ← colors blend together
+└───┴───┴───┘        └───┴───┴───┘
+```
+
+Adjacent rows with different colours get merged by the encoder — it doesn't know those colours are "important data" and treats them as noise to compress.
+
+### The Solution: Interlace
+
+**Before encoding**, we interlace the frame — interleave rows from the top and bottom halves:
+
+```
+Original:              After interlace:
+Row 0: ██ RED ██       Row 0: ██ RED ██     (from top half)
+Row 1: ██ GRN ██       Row 1: ██ BLU ██     (from bottom half)
+Row 2: ██ BLU ██       Row 2: ██ GRN ██     (from top half)
+Row 3: ██ RED ██       Row 3: ██ RED ██     (from bottom half)
+Row 4: ██ GRN ██       Row 4: ██ GRN ██     (from top half)
+Row 5: ██ BLU ██       Row 5: ██ GRN ██     (from bottom half)
+```
+
+Now adjacent rows are **spatially distant** in the original image. H.264's motion compensation and DCT transforms can't correlate them — the codec treats the frame as "noisy" and preserves more detail. After YouTube re-encodes and downloads, we **deinterlace** to restore the original layout.
+
+### Why the File is 20× Larger
+
+Interlace requires **lossless encoding** (CRF 0) to preserve the exact block colours. Lossless H.264 with **yuv444p** (full chroma resolution) produces massive files — but it's the only way to guarantee the blocks survive YouTube's processing pipeline.
+
+### When to Use Interlace
+
+| Scenario | Use Interlace? |
+|----------|---------------|
+| Local storage / backup | No — wastes space |
+| Upload to YouTube | **Yes** — blocks survive re-encoding |
+| Testing locally | No — not needed |
+| Research / demos | Optional — for completeness |
 
 ## Project Structure
 
