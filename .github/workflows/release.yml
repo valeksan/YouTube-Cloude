@@ -235,17 +235,17 @@ jobs:
           android.permissions = CAMERA,INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
           android.api = 33
           android.minapi = 24
-          android.ndk = 25b
+          android.ndk = 27b
           android.archs = arm64-v8a
           android.accept_sdk_license = True
-          p4a.branch = develop
+          p4a.branch = master
           SPEC
           sed -i "s/TAGPLACEHOLDER/${TAG}/" buildozer.spec
 
       - name: Build Android APK
         shell: bash
         run: buildozer android debug
-        timeout-minutes: 60
+        timeout-minutes: 120
 
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
