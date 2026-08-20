@@ -2,7 +2,10 @@ VENV    = .venv
 PYTHON  = $(VENV)/bin/python
 PIP     = $(VENV)/bin/pip
 
-.PHONY: help venv setup setup-dev run gui gui-qt test test-fast build build-gui build-gui-qt build-nuitka clean
+.PHONY: help venv setup setup-dev run gui gui-qt test test-fast \
+        build build-gui build-gui-qt \
+        nuitka-cli nuitka-gui \
+        benchmark clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -16,7 +19,7 @@ setup: venv ## Create venv and install runtime dependencies
 	$(PIP) install -e .
 
 setup-dev: venv ## Create venv and install all dependencies (with pytest)
-	$(PIP) install -e ".[dev]"
+	$(PIP) install -e ".[dev,gui]"
 
 run: ## Run CLI — usage: make run CMD="encode input.bin output.mp4"
 	$(PYTHON) -m youtube_cloude $(CMD)
@@ -33,6 +36,7 @@ test: setup-dev ## Run test suite
 test-fast: setup-dev ## Run tests (stop on first failure)
 	$(PYTHON) -m pytest tests/ -v --tb=short -x
 
+# ── PyInstaller builds (fast, bundled) ───────────────────────────────────
 build: setup-dev ## Build CLI binary with PyInstaller
 	$(PIP) install pyinstaller
 	$(VENV)/bin/pyinstaller --onefile --name youtube-cloude \
@@ -48,7 +52,7 @@ build: setup-dev ## Build CLI binary with PyInstaller
 	@echo ""
 	@echo "Binary: dist/youtube-cloude"
 
-build-gui: setup-dev ## Build GUI app as standalone executable
+build-gui: setup-dev ## Build tkinter GUI as standalone executable
 	$(PIP) install pyinstaller
 	$(VENV)/bin/pyinstaller --onefile --windowed --name youtube-cloude-gui \
 		--hidden-import youtube_cloude \
@@ -68,9 +72,9 @@ build-gui: setup-dev ## Build GUI app as standalone executable
 	@echo ""
 	@echo "Binary: dist/youtube-cloude-gui"
 
-build-gui-qt: setup-dev ## Build PySide6 GUI as standalone executable
+build-gui-qt: setup-dev ## Build PySide6 GUI with PyInstaller
 	$(PIP) install pyinstaller "PySide6>=6.5"
-	$(VENV)/bin/pyinstaller --onefile --windowed --name youtube-cloude-gui-qt \
+	$(VENV)/bin/pyinstaller --onefile --windowed --name youtube-cloude-gui \
 		--hidden-import youtube_cloude \
 		--hidden-import youtube_cloude.core \
 		--hidden-import youtube_cloude.encoder \
@@ -85,21 +89,43 @@ build-gui-qt: setup-dev ## Build PySide6 GUI as standalone executable
 		--hidden-import PySide6.QtGui \
 		src/youtube_cloude/gui_qt_cli.py
 	@echo ""
-	@echo "Binary: dist/youtube-cloude-gui-qt"
+	@echo "Binary: dist/youtube-cloude-gui"
 
-build-nuitka: setup-dev ## Build standalone binary with Nuitka
-	$(PIP) install nuitka
-	$(PYTHON) -m nuitka --standalone --onefile \
+# ── Nuitka builds (compiled, faster, energy-efficient) ───────────────────
+nuitka-cli: setup-dev ## Build CLI with Nuitka (compiled, 2-5× faster)
+	$(PIP) install nuitka ordered-set
+	$(PYTHON) -m nuitka \
+		--standalone --onefile \
 		--include-package=youtube_cloude \
 		--output-filename=youtube-cloude \
-		src/youtube_cloude/__main__.py
+		--output-dir=dist \
+		--assume-yes-for-downloads \
+		src/youtube_cloude/cli.py
 	@echo ""
-	@echo "Binary: youtube-cloude"
+	@echo "Binary: dist/youtube-cloude"
+
+nuitka-gui: setup-dev ## Build PySide6 GUI with Nuitka (compiled, fast)
+	$(PIP) install nuitka ordered-set "PySide6>=6.5"
+	$(PYTHON) -m nuitka \
+		--standalone --onefile \
+		--enable-plugin=pyside6 \
+		--include-package=youtube_cloude \
+		--include-package-data=PySide6 \
+		--output-filename=youtube-cloude-gui \
+		--output-dir=dist \
+		--assume-yes-for-downloads \
+		src/youtube_cloude/gui_qt_cli.py
+	@echo ""
+	@echo "Binary: dist/youtube-cloude-gui"
+
+# ── Benchmark ────────────────────────────────────────────────────────────
+benchmark: setup-dev ## Run encode/decode benchmark
+	$(PYTHON) benchmark.py
 
 clean: ## Remove build artifacts and venv
 	rm -rf build/ dist/ *.spec
 	rm -rf src/*.egg-info src/youtube_cloude.egg-info
 	rm -rf $(VENV)
-	rm -rf .pytest_cache/ tests/__pycache__/ src/youtube_cloude/__pycache__/
+	rm -rf .pytest_cache/ tests/__pycache__/ src/youtube_cloude/__pycpuje__/
 	rm -rf __pycache__/
 	find . -name "*.pyc" -delete 2>/dev/null || true
