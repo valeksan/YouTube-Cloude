@@ -78,7 +78,8 @@ This software is provided **"as is"** without warranty of any kind. The authors 
 - 🎞️ **Two formats** — YTV1 (standard) and YTV2 (21× denser)
 - 📊 **CRC32 integrity** — automatic verification on decode
 - 🔀 **Interlacing** — improved YouTube compression quality
-- 🖥️ **GUI** — tkinter interface with dark theme
+- 🖥️ **GUI** — PySide6 (Qt) interface with dark theme, responsive layout (desktop + mobile)
+- 📱 **Android** — Buildozer APK build, camera integration (coming soon)
 - 📦 **Batch mode** — encode entire directories at once
 - 🗜️ **7z compression** — optional pre-encode compression
 - 📤 **YouTube upload/download** — via yt-dlp and YouTube Data API v3
@@ -143,9 +144,14 @@ youtube-cloude encode-dir ./my-data/ ./output/ --format ytv2 --interlace
 ### Launch GUI
 
 ```bash
+# PySide6 (Qt) — recommended, responsive layout
+youtube-cloude-gui-qt
+make gui-qt
+
+# Tkinter — legacy, simpler
 youtube-cloude-gui
-# Or:
 make gui
+```
 ```
 
 ### Build Standalone Binaries
@@ -272,19 +278,26 @@ Interlace requires **lossless encoding** (CRF 0) to preserve the exact block col
 ```
 YouTube-Cloude/
 ├── src/youtube_cloude/
-│   ├── __init__.py     # Package version (1.0.0)
-│   ├── __main__.py     # CLI entry point (python -m youtube_cloude)
-│   ├── core.py         # Constants, CRC32, interlacing, encryption
-│   ├── encoder.py      # YouTubeEncoder class
-│   ├── decoder.py      # YouTubeDecoder class (auto-detect format)
-│   ├── utils.py        # CLI helpers, argparse
-│   ├── gui.py          # Tkinter GUI (dark theme)
-│   ├── compress.py     # 7z compress/decompress
-│   └── uploader.py     # YouTube upload (OAuth2) / download (yt-dlp)
+│   ├── __init__.py      # Package version (1.0.0)
+│   ├── __main__.py      # CLI entry point (python -m youtube_cloude)
+│   ├── cli.py           # PyInstaller CLI entry (absolute imports)
+│   ├── core.py          # Constants, CRC32, interlacing, encryption
+│   ├── encoder.py       # YouTubeEncoder class
+│   ├── decoder.py       # YouTubeDecoder class (auto-detect format)
+│   ├── utils.py         # CLI helpers, argparse
+│   ├── gui.py           # Tkinter GUI (dark theme)
+│   ├── gui_cli.py       # Tkinter entry for PyInstaller
+│   ├── gui_qt.py        # PySide6 GUI (responsive, dark theme)
+│   ├── gui_qt_cli.py    # PySide6 entry for PyInstaller
+│   ├── compress.py      # 7z compress/decompress
+│   └── uploader.py      # YouTube upload (OAuth2) / download (yt-dlp)
 ├── tests/
-│   └── test_encoder.py # 36 tests (unit + YouTube re-encoding simulation)
-├── pyproject.toml      # PEP 621 metadata, deps, entry points
-├── Makefile            # venv, install, run, build, test, clean
+│   └── test_encoder.py  # 36 tests (unit + YouTube re-encoding simulation)
+├── .github/workflows/
+│   ├── test.yml         # CI: test on push/PR
+│   └── release.yml      # CI: build all platforms on tag push
+├── pyproject.toml       # PEP 621 metadata, deps, entry points
+├── Makefile             # venv, install, run, build, test, clean
 └── README.md
 ```
 
