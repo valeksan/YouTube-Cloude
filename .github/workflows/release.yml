@@ -64,7 +64,7 @@ jobs:
       - run: pip install -e ".[dev,gui]"
       - run: pytest tests/ -v --tb=short -x
 
-  # ── Desktop: CLI (PyInstaller) + GUI (Nuitka+PySide6) ──────────────────
+  # ── Desktop: Nuitka CLI + Nuitka GUI (all compiled) ────────────────────
   build-desktop:
     needs: test
     strategy:
@@ -88,7 +88,7 @@ jobs:
 
       - name: Install dependencies
         shell: bash
-        run: pip install -e ".[dev,gui]" pyinstaller nuitka ordered-set "PySide6>=6.5"
+        run: pip install -e ".[dev,gui]" nuitka ordered-set "PySide6>=6.5"
 
       # ── ffmpeg ──
       - name: Install ffmpeg (Linux)
@@ -114,21 +114,19 @@ jobs:
             brew install ffmpeg
           fi
 
-      # ── CLI: PyInstaller (fast build, reliable) ──
-      - name: Build CLI (PyInstaller)
+      # ── CLI: Nuitka (compiled) ──
+      - name: Build CLI (Nuitka)
         shell: bash
         run: |
-          pyinstaller --onefile --name youtube-cloude \
-            --hidden-import youtube_cloude \
-            --hidden-import youtube_cloude.core \
-            --hidden-import youtube_cloude.encoder \
-            --hidden-import youtube_cloude.decoder \
-            --hidden-import youtube_cloude.utils \
-            --hidden-import youtube_cloude.uploader \
-            --hidden-import youtube_cloude.compress \
+          python -m nuitka \
+            --standalone --onefile \
+            --include-package=youtube_cloude \
+            --output-filename=youtube-cloude \
+            --output-dir=nuitka-build \
+            --assume-yes-for-downloads \
             src/youtube_cloude/cli.py
 
-      # ── GUI: Nuitka (compiled, 2-5× faster, energy-efficient) ──
+      # ── GUI: Nuitka + PySide6 plugin (compiled) ──
       - name: Build GUI (Nuitka + PySide6)
         shell: bash
         run: |
@@ -148,17 +146,34 @@ jobs:
         run: |
           TAG="${{ inputs.version }}"
           ARTIFACT="${{ matrix.artifact }}"
+          mkdir -p dist
+
+          # Find CLI binary
+          find nuitka-build -name "youtube-cloude" -type f ! -name "*.exe" \
+            -exec cp {} dist/youtube-cloude \; 2>/dev/null || true
+          find nuitka-build -name "youtube-cloude.exe" -type f \
+            -exec cp {} dist/youtube-cloude.exe \; 2>/dev/null || true
+
+          # Find GUI binary
+          find nuitka-build -name "youtube-cloude-gui" -type f ! -name "*.exe" \
+            -exec cp {} dist/youtube-cloude-gui \; 2>/dev/null || true
+          find nuitka-build -name "youtube-cloude-gui.exe" -type f \
+            -exec cp {} dist/youtube-cloude-gui.exe \; 2>/dev/null || true
+
+          # Rename with version
           if [ "${{ runner.os }}" = "Windows" ]; then
-            mv dist/youtube-cloude.exe "dist/youtube-cloude-${TAG}-${ARTIFACT}.exe"
-            mv nuitka-build/gui_qt_cli.dist/youtube-cloude-gui.exe \
-               "dist/youtube-cloude-gui-${TAG}-${ARTIFACT}.exe" 2>/dev/null || \
-            mv nuitka-build/youtube-cloude-gui.exe \
-               "dist/youtube-cloude-gui-${TAG}-${ARTIFACT}.exe" 2>/dev/null || true
+            [ -f dist/youtube-cloude.exe ] && \
+              mv dist/youtube-cloude.exe "dist/youtube-cloude-${TAG}-${ARTIFACT}.exe"
+            [ -f dist/youtube-cloude-gui.exe ] && \
+              mv dist/youtube-cloude-gui.exe "dist/youtube-cloude-gui-${TAG}-${ARTIFACT}.exe"
           else
-            mv dist/youtube-cloude "dist/youtube-cloude-${TAG}-${ARTIFACT}"
-            find nuitka-build -name "youtube-cloude-gui" -type f -executable \
-              -exec mv {} "dist/youtube-cloude-gui-${TAG}-${ARTIFACT}" \; 2>/dev/null || true
+            [ -f dist/youtube-cloude ] && \
+              mv dist/youtube-cloude "dist/youtube-cloude-${TAG}-${ARTIFACT}"
+            [ -f dist/youtube-cloude-gui ] && \
+              mv dist/youtube-cloude-gui "dist/youtube-cloude-gui-${TAG}-${ARTIFACT}"
           fi
+
+          echo "=== Build artifacts ==="
           ls -lh dist/
 
       - name: Upload artifacts
@@ -273,14 +288,14 @@ jobs:
 
             ### Downloads
 
-            **Desktop** (CLI via PyInstaller + GUI via Nuitka/PySide6 — compiled, fast, energy-efficient):
+            **Desktop** — compiled with Nuitka (Python → C → machine code):
             | Platform | CLI | GUI |
             |----------|-----|-----|
             | **Linux** (amd64) | `youtube-cloude-*-linux-amd64` | `youtube-cloude-gui-*-linux-amd64` |
             | **Windows** (amd64) | `youtube-cloude-*-windows-amd64.exe` | `youtube-cloude-gui-*-windows-amd64.exe` |
             | **macOS** (arm64) | `youtube-cloude-*-macos-arm64` | `youtube-cloude-gui-*-macos-arm64` |
 
-            **Android** (Kivy GUI + Buildozer):
+            **Android** — native APK (Kivy + Buildozer):
             | Platform | APK |
             |----------|-----|
             | **Android** (arm64) | `youtube_cloude-*.apk` |
@@ -300,9 +315,9 @@ jobs:
             - Or via Termux: `pkg install python ffmpeg && pip install youtube-cloude`
 
             ### Build Info
-            - **CLI**: PyInstaller (bundled, fast startup)
-            - **GUI**: Nuitka + PySide6 (compiled, 2-5× faster, energy-efficient)
-            - **Android**: Buildozer + Kivy (native APK)
+            - **All builds**: Nuitka (compiled, 2-5× faster than interpreted Python)
+            - **Desktop GUI**: PySide6 via Nuitka pyside6 plugin
+            - **Android**: Kivy GUI via Buildozer (native APK)
           files: artifacts/**/*
           draft: false
           prerelease: false
