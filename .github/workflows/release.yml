@@ -1,0 +1,273 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: '3.12'
+
+jobs:
+  # ── Test first ──────────────────────────────────────────────────────────
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Cache ffmpeg
+        id: cache-ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/ffmpeg
+          key: ffmpeg-amd64-static-v1
+
+      - name: Install ffmpeg
+        if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
+        run: |
+          curl -sL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | \
+            tar -xJ --wildcards --strip-components=1 -C /usr/local/bin '*/ffmpeg'
+
+      - run: pip install -e ".[dev]"
+      - run: pytest tests/ -v --tb=short -x
+
+  # ── Build CLI + GUI binaries ────────────────────────────────────────────
+  build-desktop:
+    needs: test
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            artifact: linux-amd64
+          - os: windows-latest
+            artifact: windows-amd64
+          - os: macos-latest
+            artifact: macos-arm64
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      - name: Install dependencies
+        run: pip install -e ".[dev,gui]"
+
+      - name: Install PyInstaller + PySide6
+        run: pip install pyinstaller "PySide6>=6.5"
+
+      # ── Linux: install ffmpeg for tests ──
+      - name: Install ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        run: |
+          if ! command -v ffmpeg &>/dev/null; then
+            curl -sL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | \
+              tar -xJ --wildcards --strip-components=1 -C /usr/local/bin '*/ffmpeg'
+          fi
+
+      # ── Windows: install ffmpeg ──
+      - name: Install ffmpeg (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          if (!(Get-Command ffmpeg -ErrorAction SilentlyContinue)) {
+            choco install ffmpeg -y
+          }
+        shell: pwsh
+
+      # ── macOS: install ffmpeg ──
+      - name: Install ffmpeg (macOS)
+        if: runner.os == 'macOS'
+        run: |
+          if ! command -v ffmpeg &>/dev/null; then
+            brew install ffmpeg
+          fi
+
+      # ── Build CLI binary ──
+      - name: Build CLI binary
+        run: |
+          pyinstaller --onefile --name youtube-cloude \
+            --hidden-import youtube_cloude \
+            --hidden-import youtube_cloude.core \
+            --hidden-import youtube_cloude.encoder \
+            --hidden-import youtube_cloude.decoder \
+            --hidden-import youtube_cloude.utils \
+            --hidden-import youtube_cloude.uploader \
+            --hidden-import youtube_cloude.compress \
+            src/youtube_cloude/cli.py
+
+      # ── Build GUI binary (PySide6) ──
+      - name: Build GUI binary
+        run: |
+          pyinstaller --onefile --windowed --name youtube-cloude-gui \
+            --hidden-import youtube_cloude \
+            --hidden-import youtube_cloude.core \
+            --hidden-import youtube_cloude.encoder \
+            --hidden-import youtube_cloude.decoder \
+            --hidden-import youtube_cloude.utils \
+            --hidden-import youtube_cloude.gui_qt \
+            --hidden-import youtube_cloude.uploader \
+            --hidden-import youtube_cloude.compress \
+            --hidden-import PySide6 \
+            --hidden-import PySide6.QtCore \
+            --hidden-import PySide6.QtWidgets \
+            --hidden-import PySide6.QtGui \
+            src/youtube_cloude/gui_qt_cli.py
+
+      # ── Rename binaries with artifact suffix ──
+      - name: Rename binaries
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          if [ "${{ runner.os }}" = "Windows" ]; then
+            mv dist/youtube-cloude.exe "dist/youtube-cloude-${TAG}-${{ matrix.artifact }}.exe"
+            mv dist/youtube-cloude-gui.exe "dist/youtube-cloude-gui-${TAG}-${{ matrix.artifact }}.exe"
+          else
+            mv dist/youtube-cloude "dist/youtube-cloude-${TAG}-${{ matrix.artifact }}"
+            mv dist/youtube-cloude-gui "dist/youtube-cloude-gui-${TAG}-${{ matrix.artifact }}"
+          fi
+        shell: bash
+
+      # ── Upload artifacts ──
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: binaries-${{ matrix.artifact }}
+          path: dist/
+          retention-days: 7
+
+  # ── Build Android APK ──────────────────────────────────────────────────
+  build-android:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+
+      # ── Install system deps for Buildozer ──
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq \
+            autoconf automake libtool pkg-config \
+            zlib1g-dev libncurses5-dev libncursesw5-dev \
+            libtinfo5 cmake libffi-dev libssl-dev \
+            openjdk-17-jdk unzip wget \
+            lld clang
+
+      # ── Install Buildozer ──
+      - name: Install Buildozer
+        run: |
+          pip install buildozer cython
+
+      # ── Create buildozer.spec ──
+      - name: Create buildozer.spec
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          cat > buildozer.spec << 'SPEC'
+          [app]
+          title = YouTube-Cloude
+          package.name = youtube_cloude
+          package.domain = com.valeksan
+          source.dir = src
+          source.include_exts = py,png,jpg,kv,atlas
+          version = ${TAG}
+          requirements = python3,pyside6,numpy,opencv-python,pycryptodome
+          orientation = portrait
+          fullscreen = 0
+          android.permissions = CAMERA,INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
+          android.api = 33
+          android.minapi = 24
+          android.ndk = 25b
+          android.arch = arm64-v8a
+          android.accept_sdk_license = True
+          ios.kivy_ios_url = https://github.com/kivy/kivy-ios
+          ios.kivy_ios_branch = master
+          ios.bootstrap_url = https://github.com/kivy/kivy-ios
+          ios.bootstrap_branch = master
+          p4a.branch = develop
+          SPEC
+
+      # ── Buildozer Android build ──
+      - name: Build Android APK
+        run: |
+          TAG=${GITHUB_REF#refs/tags/}
+          sed -i "s/\${TAG}/${TAG}/" buildozer.spec
+          buildozer android debug 2>&1 || true
+        timeout-minutes: 60
+
+      - name: Upload Android APK
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: binaries-android
+          path: bin/*.apk
+          retention-days: 7
+
+  # ── Create GitHub Release ───────────────────────────────────────────────
+  release:
+    needs: [build-desktop, build-android]
+    runs-on: ubuntu-latest
+    if: always() && needs.build-desktop.result == 'success'
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: artifacts/
+          pattern: binaries-*
+          merge-multiple: true
+
+      - name: List artifacts
+        run: find artifacts/ -type f | head -20
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "YouTube-Cloude ${{ github.ref_name }}"
+          body: |
+            ## YouTube-Cloude ${{ github.ref_name }}
+
+            ### Downloads
+            | Platform | CLI | GUI |
+            |----------|-----|-----|
+            | **Linux** (amd64) | `youtube-cloude-*-linux-amd64` | `youtube-cloude-gui-*-linux-amd64` |
+            | **Windows** (amd64) | `youtube-cloude-*-windows-amd64.exe` | `youtube-cloude-gui-*-windows-amd64.exe` |
+            | **macOS** (arm64) | `youtube-cloude-*-macos-arm64` | `youtube-cloude-gui-*-macos-arm64` |
+            | **Android** (arm64) | — | `youtube_cloude-*.apk` |
+
+            ### CLI Usage
+            ```bash
+            # Encode
+            youtube-cloude encode secret.txt output.mp4 --format ytv2
+            # Decode
+            youtube-cloude decode output.mp4 --format ytv2
+            ```
+
+            ### GUI
+            - **Linux/macOS**: `./youtube-cloude-gui-*`
+            - **Windows**: double-click `youtube-cloude-gui-*.exe`
+            - **Android**: install APK, grant camera permission
+
+            ### Requirements
+            - **CLI**: ffmpeg installed
+            - **GUI (Linux)**: `sudo apt install python3-tk` (tkinter) or PySide6 (included)
+            - **GUI (Windows/macOS)**: included in binary
+            - **Android**: Android 8.0+ (API 24+)
+          files: artifacts/**/*
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
