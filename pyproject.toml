@@ -36,12 +36,20 @@ dependencies = [
 dev = [
     "pytest>=7.0",
 ]
+gui = [
+    "PySide6>=6.5",
+]
+gui-android = [
+    "PySide6>=6.5",
+    "buildozer>=1.5",
+]
 
 [project.scripts]
 youtube-cloude = "youtube_cloude.utils:main"
 
 [project.gui-scripts]
 youtube-cloude-gui = "youtube_cloude.gui:main"
+youtube-cloude-gui-qt = "youtube_cloude.gui_qt:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

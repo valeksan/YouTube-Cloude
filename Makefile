@@ -2,7 +2,7 @@ VENV    = .venv
 PYTHON  = $(VENV)/bin/python
 PIP     = $(VENV)/bin/pip
 
-.PHONY: help venv setup setup-dev run gui test test-fast build build-gui build-nuitka clean
+.PHONY: help venv setup setup-dev run gui gui-qt test test-fast build build-gui build-gui-qt build-nuitka clean
 
 help: ## Show this help
 	@grep -E '^[a-zA-Z_-]+:.*?## .*$$' $(MAKEFILE_LIST) | sort | \
@@ -21,8 +21,11 @@ setup-dev: venv ## Create venv and install all dependencies (with pytest)
 run: ## Run CLI — usage: make run CMD="encode input.bin output.mp4"
 	$(PYTHON) -m youtube_cloude $(CMD)
 
-gui: ## Launch the GUI
+gui: ## Launch the GUI (tkinter)
 	$(PYTHON) -m youtube_cloude.gui
+
+gui-qt: ## Launch the GUI (PySide6)
+	$(PYTHON) -m youtube_cloude.gui_qt
 
 test: setup-dev ## Run test suite
 	$(PYTHON) -m pytest tests/ -v --tb=short
@@ -64,6 +67,25 @@ build-gui: setup-dev ## Build GUI app as standalone executable
 		src/youtube_cloude/gui_cli.py
 	@echo ""
 	@echo "Binary: dist/youtube-cloude-gui"
+
+build-gui-qt: setup-dev ## Build PySide6 GUI as standalone executable
+	$(PIP) install pyinstaller "PySide6>=6.5"
+	$(VENV)/bin/pyinstaller --onefile --windowed --name youtube-cloude-gui-qt \
+		--hidden-import youtube_cloude \
+		--hidden-import youtube_cloude.core \
+		--hidden-import youtube_cloude.encoder \
+		--hidden-import youtube_cloude.decoder \
+		--hidden-import youtube_cloude.utils \
+		--hidden-import youtube_cloude.gui_qt \
+		--hidden-import youtube_cloude.uploader \
+		--hidden-import youtube_cloude.compress \
+		--hidden-import PySide6 \
+		--hidden-import PySide6.QtCore \
+		--hidden-import PySide6.QtWidgets \
+		--hidden-import PySide6.QtGui \
+		src/youtube_cloude/gui_qt_cli.py
+	@echo ""
+	@echo "Binary: dist/youtube-cloude-gui-qt"
 
 build-nuitka: setup-dev ## Build standalone binary with Nuitka
 	$(PIP) install nuitka
