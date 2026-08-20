@@ -199,11 +199,14 @@ jobs:
         run: |
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
-            autoconf automake libtool pkg-config \
+            autoconf automake libtool libtool-bin \
+            pkg-config \
             zlib1g-dev libncurses-dev \
             cmake libffi-dev libssl-dev \
             openjdk-17-jdk unzip wget \
             lld clang
+          # Ensure libtool m4 macros are in aclocal path
+          sudo aclocal --print-ac-dir 2>/dev/null || true
 
       - name: Install Buildozer + Kivy
         shell: bash
@@ -214,30 +217,32 @@ jobs:
         run: |
           TAG="${{ inputs.version }}"
           cat > buildozer.spec << 'SPEC'
-          [app]
-          title = YouTube-Cloude
-          package.name = youtube_cloude
-          package.domain = com.valeksan
-          source.dir = src
-          source.include_exts = py,png,jpg,kv,atlas
-          source.main = youtube_cloude.gui_kivy:main
-          version = TAGPLACEHOLDER
-          requirements = python3,kivy,numpy,opencv-python-headless,pycryptodome
-          orientation = portrait
-          fullscreen = 0
-          android.permissions = CAMERA,INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
-          android.api = 33
-          android.minapi = 24
-          android.ndk = 25b
-          android.arch = arm64-v8a
-          android.accept_sdk_license = True
-          p4a.branch = develop
-          SPEC
+[app]
+title = YouTube-Cloude
+package.name = youtube_cloude
+package.domain = com.valeksan
+source.dir = src
+source.include_exts = py,png,jpg,kv,atlas
+source.main = youtube_cloude.gui_kivy:main
+version = TAGPLACEHOLDER
+requirements = python3,kivy,numpy,opencv,pycryptodome
+orientation = portrait
+fullscreen = 0
+android.permissions = CAMERA,INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
+android.api = 33
+android.minapi = 24
+android.ndk = 25b
+android.archs = arm64-v8a
+android.accept_sdk_license = True
+p4a.branch = develop
+SPEC
           sed -i "s/TAGPLACEHOLDER/${TAG}/" buildozer.spec
 
       - name: Build Android APK
         shell: bash
-        run: buildozer android debug
+        run: |
+          export ACLOCAL_PATH="/usr/share/aclocal:/usr/lib/x86_64-linux-gnu/aclocal"
+          buildozer android debug
         timeout-minutes: 60
 
       - name: Upload Android APK
