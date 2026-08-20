@@ -61,7 +61,7 @@ build-gui: setup-dev ## Build GUI app as standalone executable
 		--hidden-import tkinter.filedialog \
 		--hidden-import tkinter.messagebox \
 		--hidden-import tkinter.scrolledtext \
-		src/youtube_cloude/gui.py
+		src/youtube_cloude/gui_cli.py
 	@echo ""
 	@echo "Binary: dist/youtube-cloude-gui"
 
