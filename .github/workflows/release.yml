@@ -126,6 +126,7 @@ jobs:
 
       # ── Build CLI binary ──
       - name: Build CLI binary
+        shell: bash
         run: |
           pyinstaller --onefile --name youtube-cloude \
             --hidden-import youtube_cloude \
@@ -139,6 +140,7 @@ jobs:
 
       # ── Build GUI binary (PySide6) ──
       - name: Build GUI binary
+        shell: bash
         run: |
           pyinstaller --onefile --windowed --name youtube-cloude-gui \
             --hidden-import youtube_cloude \
@@ -157,6 +159,7 @@ jobs:
 
       # ── Rename binaries with version ──
       - name: Rename binaries
+        shell: bash
         run: |
           TAG="${{ inputs.version }}"
           if [ "${{ runner.os }}" = "Windows" ]; then
@@ -166,7 +169,6 @@ jobs:
             mv dist/youtube-cloude "dist/youtube-cloude-${TAG}-${{ matrix.artifact }}"
             mv dist/youtube-cloude-gui "dist/youtube-cloude-gui-${TAG}-${{ matrix.artifact }}"
           fi
-        shell: bash
 
       # ── Upload artifacts ──
       - name: Upload artifacts
@@ -193,8 +195,8 @@ jobs:
           sudo apt-get update -qq
           sudo apt-get install -y -qq \
             autoconf automake libtool pkg-config \
-            zlib1g-dev libncurses5-dev libncursesw5-dev \
-            libtinfo5 cmake libffi-dev libssl-dev \
+            zlib1g-dev libncurses-dev \
+            cmake libffi-dev libssl-dev \
             openjdk-17-jdk unzip wget \
             lld clang
 
