@@ -33,7 +33,7 @@ jobs:
         uses: actions/cache@v4
         with:
           path: /usr/local/bin
-          key: ffmpeg-amd64-static-v2
+          key: ffmpeg-amd64-static-v3
 
       - name: Install ffmpeg
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
@@ -41,7 +41,7 @@ jobs:
           for i in 1 2 3 4 5; do
             curl -sfL --retry 3 --retry-delay 5 \
               https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | \
-              tar -xJ --wildcards --strip-components=1 -C /usr/local/bin '*/ffmpeg' '*/ffprobe' && break
+              tar -xJ --wildcards --strip-components=1 -C /usr/local/bin '*/ffmpeg' '*/ffprobe' && break || true
             echo "Attempt $i failed, retrying in $((i*5))s..." >&2
             sleep $((i*5))
           done
