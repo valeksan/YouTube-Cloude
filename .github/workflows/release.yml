@@ -96,9 +96,17 @@ jobs:
         shell: bash
         run: |
           if ! command -v ffmpeg &>/dev/null; then
-            curl -sL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | \
-              tar -xJ --wildcards --strip-components=1 -C /usr/local/bin '*/ffmpeg' '*/ffprobe'
+            for i in 1 2 3 4 5; do
+              curl -sfL --retry 3 --retry-delay 5 \
+                https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | \
+                tar -xJ --wildcards --strip-components=1 -C /usr/local/bin '*/ffmpeg' '*/ffprobe' && break
+              echo "Attempt $i failed, retrying in $((i*5))s..." >&2
+              sleep $((i*5))
+            done
+            command -v ffmpeg &>/dev/null || { echo "::error::ffmpeg install failed after retries"; exit 1; }
           fi
+          ffmpeg -version | head -1
+          ffprobe -version | head -1
       - name: Install ffmpeg (Windows)
         if: runner.os == 'Windows'
         shell: bash
@@ -244,7 +252,14 @@ jobs:
 
       - name: Build Android APK
         shell: bash
-        run: buildozer android debug
+        run: |
+          EXIT=0
+          for i in 1 2 3; do
+            buildozer android debug && { EXIT=0; break; } || EXIT=$?
+            echo "Buildozer attempt $i failed (exit $EXIT), retrying in $((i*30))s..." >&2
+            sleep $((i*30))
+          done
+          exit $EXIT
         timeout-minutes: 120
 
       - name: Upload Android APK
