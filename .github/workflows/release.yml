@@ -253,28 +253,9 @@ jobs:
           android.archs = arm64-v8a
           android.accept_sdk_license = True
           p4a.branch = master
+          p4a.local_recipes = recipes
           SPEC
           sed -i "s/TAGPLACEHOLDER/${TAG}/" buildozer.spec
-
-      - name: Pre-cache recipe sources
-        shell: bash
-        run: |
-          # Savannah (freetype) is unreliable — pre-download with curl retries
-          FREETYPE_VER="2.14.1"
-          FREETYPE_URL="https://download.savannah.gnu.org/releases/freetype/freetype-${FREETYPE_VER}.tar.gz"
-          P4A_PKG="$HOME/.buildozer/android/packages"
-          mkdir -p "$P4A_PKG/freetype"
-          if [ ! -f "$P4A_PKG/freetype/freetype-${FREETYPE_VER}.tar.gz" ]; then
-            echo "Pre-downloading freetype-${FREETYPE_VER}..."
-            for i in 1 2 3 4 5 6 7 8; do
-              curl -sfL --retry 3 --retry-delay 5 -o \
-                "$P4A_PKG/freetype/freetype-${FREETYPE_VER}.tar.gz" \
-                "$FREETYPE_URL" && break || true
-              echo "Attempt $i failed, retrying in $((i*10))s..." >&2
-              sleep $((i*10))
-            done
-          fi
-          ls -lh "$P4A_PKG/freetype/" 2>/dev/null || echo "Cache dir empty"
 
       - name: Build Android APK
         shell: bash
