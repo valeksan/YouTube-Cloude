@@ -53,13 +53,13 @@ jobs:
         id: cache-ffmpeg
         uses: actions/cache@v4
         with:
-          path: /usr/local/bin/ffmpeg
-          key: ffmpeg-amd64-static-v1
+          path: /usr/local/bin
+          key: ffmpeg-amd64-static-v2
       - name: Install ffmpeg
         if: steps.cache-ffmpeg.outputs.cache-hit != 'true'
         run: |
           curl -sL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | \
-            tar -xJ --wildcards --strip-components=1 -C /usr/local/bin '*/ffmpeg'
+            tar -xJ --wildcards --strip-components=1 -C /usr/local/bin '*/ffmpeg' '*/ffprobe'
 
       - run: pip install -e ".[dev,gui]"
       - run: pytest tests/ -v --tb=short -x
@@ -97,7 +97,7 @@ jobs:
         run: |
           if ! command -v ffmpeg &>/dev/null; then
             curl -sL https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | \
-              tar -xJ --wildcards --strip-components=1 -C /usr/local/bin '*/ffmpeg'
+              tar -xJ --wildcards --strip-components=1 -C /usr/local/bin '*/ffmpeg' '*/ffprobe'
           fi
       - name: Install ffmpeg (Windows)
         if: runner.os == 'Windows'
