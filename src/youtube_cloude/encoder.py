@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 """YouTube video encoder — encodes arbitrary files into colour-block frames.
 
+No OpenCV dependency — uses numpy, Pillow, and ffmpeg subprocess.
+
 Improvements based on work by @Hinderchik, @IvanSCP, and @sosatel30000.
 See: https://github.com/Hinderchik/YouTube-Cloude-Fork
      https://github.com/IvanSCP/YouTube-Cloude
      https://github.com/sosatel30000/YouTube-Cloude
 """
-import cv2
 import math
 import os
 import shutil
@@ -24,6 +25,7 @@ from .core import (
     data_to_blocks, sanitize_filename, validate_input_file,
     crc32_hex, interlace_frame,
 )
+from .video_io import save_frame_png, png_sequence_to_mp4
 
 
 class YouTubeEncoder:
@@ -72,29 +74,25 @@ class YouTubeEncoder:
         print(f"  Interlace:  {'ON' if self.interlace else 'OFF'}")
         print(f"  Max file:   {self.max_file_size / 1024 / 1024:.0f} MB")
 
-    # ── Drawing helpers ─────────────────────────────────────────────────
+    # ── Drawing helpers (pure numpy) ───────────────────────────────────
     def draw_markers(self, frame: np.ndarray) -> np.ndarray:
-        """Draw alignment markers in each corner."""
+        """Draw alignment markers in each corner (white fill, black border)."""
+        ms = self.marker_size
         for x, y in [
             (0, 0),
-            (self.width - self.marker_size, 0),
-            (0, self.height - self.marker_size),
-            (self.width - self.marker_size, self.height - self.marker_size),
+            (self.width - ms, 0),
+            (0, self.height - ms),
+            (self.width - ms, self.height - ms),
         ]:
-            cv2.rectangle(
-                frame,
-                (x, y),
-                (x + self.marker_size, y + self.marker_size),
-                (255, 255, 255),
-                -1,
-            )
-            cv2.rectangle(
-                frame,
-                (x, y),
-                (x + self.marker_size, y + self.marker_size),
-                (0, 0, 0),
-                2,
-            )
+            x2 = x + ms
+            y2 = y + ms
+            # White fill
+            frame[y:y2, x:x2] = (255, 255, 255)
+            # Black border (2px)
+            frame[y:y2, x:min(x + 2, x2)] = (0, 0, 0)
+            frame[y:y2, max(x2 - 2, x):x2] = (0, 0, 0)
+            frame[y:min(y + 2, y2), x:x2] = (0, 0, 0)
+            frame[max(y2 - 2, y):y2, x:x2] = (0, 0, 0)
         return frame
 
     def draw_block(
@@ -113,8 +111,13 @@ class YouTubeEncoder:
         if x2 > self.width - self.marker_size or y2 > self.height - self.marker_size:
             return False
 
-        cv2.rectangle(frame, (x1, y1), (x2, y2), color, -1)
-        cv2.rectangle(frame, (x1, y1), (x2, y2), (0, 0, 0), 1)
+        # Fill block with colour
+        frame[y1:y2, x1:x2] = color
+        # 1px black border
+        frame[y1:min(y1 + 1, y2), x1:x2] = (0, 0, 0)
+        frame[max(y2 - 1, y1):y2, x1:x2] = (0, 0, 0)
+        frame[y1:y2, x1:min(x1 + 1, x2)] = (0, 0, 0)
+        frame[y1:y2, max(x2 - 1, x1):x2] = (0, 0, 0)
         return True
 
     def bits_to_color(self, bits: str) -> tuple:
@@ -236,7 +239,7 @@ class YouTubeEncoder:
                 frame_file = os.path.join(temp_dir, f"frame_{frame_num:05d}.png")
                 if self.interlace:
                     frame = interlace_frame(frame)
-                cv2.imwrite(frame_file, frame)
+                save_frame_png(frame, frame_file)
 
             # Guard frames (blue)
             print("\n  Creating guard frames...")
@@ -248,58 +251,35 @@ class YouTubeEncoder:
                     for x in range(self.blocks_x * 2):
                         self.draw_block(frame, x, y, (255, 0, 0))
                 frame_file = os.path.join(temp_dir, f"frame_{frame_num:05d}.png")
-                cv2.imwrite(frame_file, frame)
+                save_frame_png(frame, frame_file)
                 print(f"  Guard frame {i + 1}/5")
 
             # Convert to MP4
             print("\n  Converting to MP4...")
-            # Interlaced frames have high-frequency row transitions that
-            # yuv420p chroma subsampling destroys.  Use yuv444p for interlaced
-            # to preserve full colour resolution at block boundaries.
             pix_fmt = 'yuv444p' if self.interlace else 'yuv420p'
             crf = '0' if self.interlace else '23'
             preset = 'ultrafast' if self.interlace else 'slow'
             print(f"  FFmpeg: CRF {crf}, preset {preset}, pix_fmt {pix_fmt}")
-            try:
-                subprocess.run(
-                    ['ffmpeg', '-version'],
-                    capture_output=True,
-                    check=True,
-                )
-                cmd = [
-                    'ffmpeg',
-                    '-framerate', str(self.fps),
-                    '-i', os.path.join(temp_dir, 'frame_%05d.png'),
-                    '-c:v', 'libx264',
-                    '-preset', preset,
-                    '-crf', crf,
-                    '-pix_fmt', pix_fmt,
-                ]
-                # libx264 needs high444 profile for yuv444p
-                if self.interlace:
-                    cmd.extend(['-profile:v', 'high444', '-level', '4.1'])
-                cmd.extend([
-                    '-an',
-                    '-movflags', '+faststart',
-                    '-y',
-                    output_file,
-                ])
-                subprocess.run(cmd, check=True, capture_output=True)
+
+            input_pattern = os.path.join(temp_dir, 'frame_%05d.png')
+            extra_args = []
+            if self.interlace:
+                extra_args.extend(['-profile:v', 'high444', '-level', '4.1'])
+
+            ok = png_sequence_to_mp4(
+                input_pattern=input_pattern,
+                output_file=output_file,
+                fps=self.fps,
+                pix_fmt=pix_fmt,
+                crf=crf,
+                preset=preset,
+                extra_args=extra_args if extra_args else None,
+            )
+            if ok:
                 print("  FFmpeg conversion OK")
-            except (subprocess.CalledProcessError, FileNotFoundError):
-                print("  FFmpeg unavailable, falling back to OpenCV...")
-                fourcc = cv2.VideoWriter_fourcc(*'mp4v')
-                out = cv2.VideoWriter(
-                    output_file, fourcc, self.fps, (self.width, self.height)
-                )
-                for frame_num in range(frames_needed):
-                    frame_file = os.path.join(
-                        temp_dir, f"frame_{frame_num:05d}.png"
-                    )
-                    frame = cv2.imread(frame_file)
-                    if frame is not None:
-                        out.write(frame)
-                out.release()
+            else:
+                print("  FFmpeg conversion FAILED")
+                return False
 
         finally:
             shutil.rmtree(temp_dir, ignore_errors=True)

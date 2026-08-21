@@ -1,14 +1,16 @@
 #!/usr/bin/env python3
 """YouTube video decoder — extracts files from colour-block frame videos.
 
+No OpenCV dependency — uses numpy, Pillow, and ffmpeg subprocess.
+
 Improvements based on work by @Hinderchik, @IvanSCP, and @sosatel30000.
 See: https://github.com/Hinderchik/YouTube-Cloude-Fork
      https://github.com/IvanSCP/YouTube-Cloude
      https://github.com/sosatel30000/YouTube-Cloude
 """
-import cv2
 import os
 import re
+import time
 from pathlib import Path
 from typing import Optional, Callable
 
@@ -21,6 +23,7 @@ from .core import (
     blocks_to_bytes, data_to_blocks,
     verify_crc32, deinterlace_frame,
 )
+from .video_io import probe_video, read_frames, resize_frame, bgr_to_gray
 
 
 class YouTubeDecoder:
@@ -84,14 +87,10 @@ class YouTubeDecoder:
         Returns the closest known marker size (80 for YTV1, 16 for YTV2).
         """
         if frame.shape[1] != self.width or frame.shape[0] != self.height:
-            frame = cv2.resize(
-                frame, (self.width, self.height), interpolation=cv2.INTER_NEAREST
-            )
-        gray = cv2.cvtColor(frame, cv2.COLOR_BGR2GRAY)
+            frame = resize_frame(frame, self.width, self.height)
+        gray = bgr_to_gray(frame)
 
         # Scan along multiple rows to find where the white marker ends.
-        # Sample several rows in the top half to be robust against
-        # compression artifacts on any single row.
         scores = []
         for cy in [20, 30, 40, 50, 60]:
             for x in range(5, min(200, self.width)):
@@ -165,11 +164,7 @@ class YouTubeDecoder:
     def decode_frame_fast(self, frame: np.ndarray) -> list[str]:
         """Decode one frame into 4-bit block strings (region-sampled)."""
         if frame.shape[1] != self.width or frame.shape[0] != self.height:
-            frame = cv2.resize(
-                frame,
-                (self.width, self.height),
-                interpolation=cv2.INTER_NEAREST,
-            )
+            frame = resize_frame(frame, self.width, self.height)
         if self.interlace:
             frame = deinterlace_frame(frame)
 
@@ -215,15 +210,17 @@ class YouTubeDecoder:
             print(f"  Error: file not found: {video_file}")
             return False
 
-        cap = cv2.VideoCapture(video_file)
-        if not cap.isOpened():
-            print("  Error: could not open video")
+        # Probe video metadata
+        try:
+            meta = probe_video(video_file)
+        except (FileNotFoundError, ValueError) as e:
+            print(f"  Error: {e}")
             return False
 
-        total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
-        fps = cap.get(cv2.CAP_PROP_FPS)
-        width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-        height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        total_frames = meta['total_frames']
+        fps = meta['fps']
+        width = meta['width']
+        height = meta['height']
 
         print(f"  Frames:  {total_frames}")
         print(f"  FPS:     {fps}")
@@ -231,42 +228,46 @@ class YouTubeDecoder:
 
         self.cache_hits = 0
         self.cache_misses = 0
-        start_time = cv2.getTickCount()
+        start_time = time.perf_counter()
 
         # If format not yet configured, detect from first frame's marker
         if not self._format_configured:
-            ret, first_frame = cap.read()
-            if ret:
-                # Deinterlace first so marker detection sees clean markers
-                if self.interlace:
-                    first_frame = deinterlace_frame(first_frame)
-                detected_ms = self._detect_marker_size(first_frame)
-                print(f"  Detected marker size: {detected_ms}px")
-                self._configure_format(detect_format(detected_ms))
-                print(f"  Auto-detected format: {self.format_name}")
-                print(f"  Grid: {self.blocks_x} x {self.blocks_y} blocks")
-                # Seek back to frame 0
-                cap.set(cv2.CAP_PROP_POS_FRAMES, 0)
-            else:
-                # Can't read first frame → default to YTV1
+            try:
+                # Read just the first frame
+                first_gen = read_frames(video_file, start_frame=0, max_frames=1)
+                first_frame = None
+                for _, f in first_gen:
+                    first_frame = f
+                    break
+
+                if first_frame is not None:
+                    # Deinterlace first so marker detection sees clean markers
+                    if self.interlace:
+                        first_frame = deinterlace_frame(first_frame)
+                    detected_ms = self._detect_marker_size(first_frame)
+                    print(f"  Detected marker size: {detected_ms}px")
+                    self._configure_format(detect_format(detected_ms))
+                    print(f"  Auto-detected format: {self.format_name}")
+                    print(f"  Grid: {self.blocks_x} x {self.blocks_y} blocks")
+                else:
+                    # Can't read first frame → default to YTV1
+                    self._configure_format(get_format('ytv1'))
+                    print("  Warning: cannot read first frame, defaulting to YTV1")
+            except Exception as e:
                 self._configure_format(get_format('ytv1'))
-                print("  Warning: cannot read first frame, defaulting to YTV1")
+                print(f"  Warning: format detection failed ({e}), defaulting to YTV1")
 
         all_blocks: list[str] = []
         frames_processed = 0
 
-        for frame_num in range(total_frames):
+        for frame_num, frame in read_frames(video_file):
             if progress_callback:
                 progress_callback(frame_num + 1, total_frames)
-
-            ret, frame = cap.read()
-            if not ret:
-                break
 
             frames_processed += 1
 
             if frame_num % 100 == 0:
-                elapsed = (cv2.getTickCount() - start_time) / cv2.getTickFrequency()
+                elapsed = time.perf_counter() - start_time
                 speed = frames_processed / elapsed if elapsed > 0 else 0
                 total_cache = self.cache_hits + self.cache_misses
                 cache_ratio = (
@@ -281,9 +282,7 @@ class YouTubeDecoder:
             frame_blocks = self.decode_frame_fast(frame)
             all_blocks.extend(frame_blocks)
 
-        cap.release()
-
-        elapsed = (cv2.getTickCount() - start_time) / cv2.getTickFrequency()
+        elapsed = time.perf_counter() - start_time
         print(f"\n  Stats: {len(all_blocks)} blocks in {elapsed:.1f}s")
         total_cache = self.cache_hits + self.cache_misses
         print(

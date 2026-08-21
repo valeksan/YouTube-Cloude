@@ -229,7 +229,7 @@ jobs:
           source.include_exts = py,png,jpg,kv,atlas
           source.main = youtube_cloude.gui_kivy:main
           version = TAGPLACEHOLDER
-          requirements = python3,kivy,numpy,opencv,pycryptodome
+          requirements = python3,kivy,numpy,pillow,pycryptodome
           orientation = portrait
           fullscreen = 0
           android.permissions = CAMERA,INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
