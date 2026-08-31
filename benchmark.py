@@ -10,21 +10,39 @@ import shutil
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), 'src'))
 from youtube_cloude.core import crc32_hex
 
-BINARY = os.path.join(os.path.dirname(__file__), 'dist', 'youtube-cloude')
-INPUT = '/home/vi/Pictures/benchmark.png'
-WORKDIR = '/tmp/benchmark_run'
+def _find_binary() -> list[str]:
+    """Return command to invoke encoder: dist binary if exists, else python -m."""
+    candidates = []
+    base = os.path.join(os.path.dirname(__file__), 'dist')
+    if sys.platform.startswith('win'):
+        candidates.append(os.path.join(base, 'youtube-cloude.exe'))
+    candidates.append(os.path.join(base, 'youtube-cloude'))
+    for p in candidates:
+        if os.path.exists(p):
+            return [p]
+    # fallback: python module (uses .venv / installed package)
+    return [sys.executable, '-m', 'youtube_cloude']
+
+BINARY = _find_binary()
+# Cross-platform temp handling; INPUT will be generated if missing
+DEFAULT_INPUT = os.path.join(os.path.dirname(__file__), 'benchmark_input.png')
+WORKDIR = os.path.join(os.path.dirname(__file__), '.benchmark_run')
 KEY = 'bench-test-key'
 
 VARIANTS = [
-    # (format, interlace, encryption, label)
-    ('ytv1', False, False, 'YTV1'),
-    ('ytv1', False, True,  'YTV1 + AES'),
-    ('ytv1', True,  False, 'YTV1 + interlace'),
-    ('ytv1', True,  True,  'YTV1 + interlace + AES'),
-    ('ytv2', False, False, 'YTV2'),
-    ('ytv2', False, True,  'YTV2 + AES'),
-    ('ytv2', True,  False, 'YTV2 + interlace'),
-    ('ytv2', True,  True,  'YTV2 + interlace + AES'),
+    # (format, interlace, compress, encryption, label)
+    ('ytv1', False, False, False, 'YTV1'),
+    ('ytv1', False, False, True,  'YTV1 + AES'),
+    ('ytv1', True,  False, False, 'YTV1 + interlace'),
+    ('ytv1', True,  False, True,  'YTV1 + interlace + AES'),
+    ('ytv2', False, False, False, 'YTV2'),
+    ('ytv2', False, False, True,  'YTV2 + AES'),
+    ('ytv2', True,  False, False, 'YTV2 + interlace'),
+    ('ytv2', True,  False, True,  'YTV2 + interlace + AES'),
+    ('ytv3', False, False, False, 'YTV3'),
+    ('ytv3', False, False, True,  'YTV3 + AES'),
+    ('ytv3', False, True,  False, 'YTV3 + compress'),
+    ('ytv3', False, True,  True,  'YTV3 + compress + AES'),
 ]
 
 
@@ -45,32 +63,82 @@ def md5(path: str) -> str:
     return h.hexdigest()
 
 
+def ensure_input(path: str = DEFAULT_INPUT) -> str:
+    """Generate a ~513 KB PNG (800x600 geometric + noise) if *path* missing."""
+    if os.path.exists(path):
+        return path
+    try:
+        from PIL import Image, ImageDraw
+        import random
+        random.seed(42)
+        img = Image.new('RGB', (800, 600), (240, 240, 240))
+        draw = ImageDraw.Draw(img)
+        # geometric shapes
+        for _ in range(120):
+            x0, y0 = random.randint(0, 700), random.randint(0, 500)
+            x1, y1 = x0 + random.randint(20, 120), y0 + random.randint(20, 120)
+            fill = (random.randint(0,255), random.randint(0,255), random.randint(0,255))
+            if random.random() < 0.5:
+                draw.rectangle([x0, y0, x1, y1], fill=fill, outline=(0,0,0))
+            else:
+                draw.ellipse([x0, y0, x1, y1], fill=fill, outline=(0,0,0))
+        # noise pixels
+        pix = img.load()
+        for _ in range(80000):
+            pix[random.randint(0,799), random.randint(0,599)] = (random.randint(0,255), random.randint(0,255), random.randint(0,255))
+        img.save(path, 'PNG')
+        # pad to ~513 KB if smaller (deterministic)
+        size = os.path.getsize(path)
+        target = 513 * 1024
+        if size < target:
+            with open(path, 'ab') as f:
+                f.write(os.urandom(target - size))
+        return path
+    except Exception as e:
+        # fallback tiny file
+        with open(path, 'wb') as f:
+            f.write(os.urandom(513*1024))
+        return path
+
 def main():
+    inp = ensure_input()
     os.makedirs(WORKDIR, exist_ok=True)
 
-    orig_md5 = md5(INPUT)
-    orig_size = get_size(INPUT)
-    orig_crc = crc32_hex(open(INPUT, 'rb').read())
+    orig_md5 = md5(inp)
+    orig_size = get_size(inp)
+    orig_crc = crc32_hex(open(inp, 'rb').read())
 
     results = []
 
+    import platform
+    try:
+        import psutil
+        mem_gb = psutil.virtual_memory().total / (1024**3)
+    except ImportError:
+        mem_gb = 0
     print(f"{'='*80}")
-    print(f"BENCHMARK: {INPUT}")
+    print(f"BENCHMARK: {inp}")
     print(f"  Size: {orig_size:,} bytes ({orig_size/1024:.1f} KB)")
     print(f"  MD5:  {orig_md5}")
     print(f"  CRC:  {orig_crc}")
+    print(f"  Host: {platform.processor() or 'unknown'} | {platform.system()} {platform.release()} | Python {platform.python_version()}")
+    if mem_gb:
+        print(f"  RAM:  {mem_gb:.1f} GB")
+    print(f"  Binary: {' '.join(BINARY)}")
     print(f"{'='*80}\n")
 
-    for fmt, interlace, encrypt, label in VARIANTS:
+    for fmt, interlace, compress, encrypt, label in VARIANTS:
         print(f"--- {label} ---")
         video = os.path.join(WORKDIR, f'test_{fmt}_{"il" if interlace else "noil"}_{"enc" if encrypt else "noenc"}.mp4')
         decode_dir = os.path.join(WORKDIR, f'decode_{fmt}_{"il" if interlace else "noil"}_{"enc" if encrypt else "noenc"}')
         os.makedirs(decode_dir, exist_ok=True)
 
         # ── Encode ──
-        enc_cmd = [BINARY, 'encode', INPUT, video, '--format', fmt]
+        enc_cmd = BINARY + ['encode', inp, video, '--format', fmt]
         if interlace:
             enc_cmd.append('--interlace')
+        if compress:
+            enc_cmd.append('--compress')
         if encrypt:
             enc_cmd.extend(['--key', KEY])
 
@@ -82,7 +150,7 @@ def main():
         enc_ok = 'Video saved' in out
 
         # ── Decode ──
-        dec_cmd = [BINARY, 'decode', video, decode_dir, '--format', fmt]
+        dec_cmd = BINARY + ['decode', video, decode_dir, '--format', fmt]
         if interlace:
             dec_cmd.append('--interlace')
         if encrypt:
@@ -112,6 +180,7 @@ def main():
             'label': label,
             'format': fmt,
             'interlace': interlace,
+            'compress': compress,
             'encryption': encrypt,
             'enc_time': t_enc,
             'dec_time': t_dec,
@@ -130,7 +199,7 @@ def main():
 
     # ── Summary table ──
     print(f"\n{'='*100}")
-    print(f"BENCHMARK RESULTS — {os.path.basename(INPUT)} ({orig_size/1024:.1f} KB)")
+    print(f"BENCHMARK RESULTS — {os.path.basename(inp)} ({orig_size/1024:.1f} KB)")
     print(f"{'='*100}")
     print(f"{'Variant':<30} {'Enc time':>9} {'Dec time':>9} {'Video':>10} {'Ratio':>8} {'Verified':>9}")
     print(f"{'-'*30} {'-'*9} {'-'*9} {'-'*10} {'-'*8} {'-'*9}")

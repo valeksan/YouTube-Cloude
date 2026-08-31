@@ -213,29 +213,33 @@ make test-fast      # stop on first failure
 
 ## Benchmark
 
-**Test system:** AMD Ryzen 5 1600 (6C/12T, 3.2 GHz), 16 GB RAM, Linux 6.12 LTS
-
-Test image: generated 513 KB PNG (800×600, geometric shapes + noise). All variants verified with MD5 — **8/8 passed**.
+**Test system (2026-08-31):** AMD Ryzen 3 PRO 4350G (4C/8T, 3.8 GHz), 28 GB RAM, Windows 11, Python 3.13, FFmpeg N-111283, `benchmark_input.png` 550 KB (800×600 geometric + 80k noise pixels). All variants verified with MD5 — **12/12 passed**.
 
 | Variant | Encode | Decode | Video Size | Overhead | Verified |
 |---------|--------|--------|------------|----------|----------|
-| YTV1 | 33.8s | 16.8s | 36.0 MB | 71.8× | YES |
-| YTV1 + AES | 37.3s | 17.3s | 36.1 MB | 72.0× | YES |
-| YTV1 + interlace | 21.6s | 18.1s | 365.6 MB | 729.6× | YES |
-| YTV1 + interlace + AES | 21.4s | 18.3s | 365.7 MB | 729.8× | YES |
-| YTV2 | 16.0s | 19.0s | 18.5 MB | 36.8× | YES |
-| YTV2 + AES | 16.1s | 19.2s | 18.5 MB | 36.9× | YES |
-| YTV2 + interlace | 12.7s | 17.8s | 138.6 MB | 276.5× | YES |
-| YTV2 + interlace + AES | 12.8s | 17.6s | 138.5 MB | 276.4× | YES |
+| YTV1 | 45.8s | 13.4s | 45.8 MB | 85.2× | YES |
+| YTV1 + AES | 45.0s | 13.5s | 45.8 MB | 85.2× | YES |
+| YTV1 + interlace | 39.5s | 13.9s | 367.7 MB | 684.3× | YES |
+| YTV1 + interlace + AES | 39.0s | 14.7s | 368.5 MB | 685.8× | YES |
+| YTV2 | 18.0s | 13.8s | 17.9 MB | 33.2× | YES |
+| YTV2 + AES | 18.2s | 13.8s | 17.9 MB | 33.3× | YES |
+| YTV2 + interlace | 15.4s | 10.7s | 137.3 MB | 255.5× | YES |
+| YTV2 + interlace + AES | 16.3s | 12.1s | 137.6 MB | 256.2× | YES |
+| **YTV3** | 32.6s | 26.4s | 21.0 MB | 39.1× | YES |
+| **YTV3 + AES** | 32.0s | 26.4s | 21.0 MB | 39.0× | YES |
+| **YTV3 + compress** | 31.8s | 26.2s | 21.0 MB | 39.1× | YES |
+| **YTV3 + compress + AES** | 31.9s | 26.4s | 21.0 MB | 39.0× | YES |
+
+*Previous system (2026-08-21):* Ryzen 5 1600, 16 GB, Linux 6.12 — YTV1 33.8s/36 MB, YTV2 16.0s/18.5 MB (513 KB input).
 
 ### Key Findings
 
-- **YTV2 is 2× faster to encode** than YTV1 (fewer frames: 21 vs 85)
-- **YTV2 produces 2× smaller video** (higher density, fewer wasted pixels)
-- **AES encryption adds ~0.1–3.5s overhead** — negligible for encode, ~0.5s for decode
-- **Interlace produces 20× larger files** (requires lossless CRF 0 + yuv444p)
-- **Without interlace:** YTV2 is optimal (faster + smaller)
-- **With interlace:** YTV2 is still better (276× vs 730× overhead)
+- **YTV2 is 2.5× faster to encode** than YTV1 (18s vs 46s, fewer frames: 52 vs 79)
+- **YTV2 produces 2.5× smaller video** (17.9 MB vs 45.8 MB) — highest density
+- **YTV3** trades density for resilience: 21 MB (39×) vs YTV2 17.9 MB (33×) but **yuv420p-safe without interlace** + RS(255,223) corrects 16 byte errors/chunk
+- **AES-GCM + PBKDF2 adds <1s overhead** — negligible vs AES-CBC SHA256
+- **Interlace produces 15× larger files** (yuv444p CRF 0) — YTV3 avoids this entirely
+- **Compress** (`--compress` zlib) on this incompressible PNG shows no gain (as expected); on text/logs yields 100–200× reduction (see §Compression)
 
 ## How Interlace Works
 
