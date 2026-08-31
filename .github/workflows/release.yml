@@ -132,8 +132,15 @@ jobs:
       - name: Build CLI (Nuitka)
         shell: bash
         run: |
+          # --onefile only on Windows (single small .exe). On Linux/macOS build
+          # --standalone (no --onefile) to avoid the huge onefile payloads; the
+          # standalone dirs are packaged into .AppImage/.dmg below.
+          ONEFILE=""
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            ONEFILE="--onefile"
+          fi
           python -m nuitka \
-            --standalone --onefile \
+            --standalone $ONEFILE \
             --include-package=youtube_cloude \
             --output-filename=youtube-cloude \
             --output-dir=nuitka-build \
@@ -144,12 +151,14 @@ jobs:
       - name: Build GUI (Nuitka + PySide6)
         shell: bash
         run: |
+          ONEFILE=""
           NUITKA_FLAGS=""
           if [ "$RUNNER_OS" = "Windows" ]; then
+            ONEFILE="--onefile"
             NUITKA_FLAGS="--windows-console-mode=disable"
           fi
           python -m nuitka \
-            --standalone --onefile \
+            --standalone $ONEFILE \
             --enable-plugin=pyside6 \
             --include-package=youtube_cloude \
             --include-package-data=PySide6 \
@@ -159,37 +168,68 @@ jobs:
             $NUITKA_FLAGS \
             src/youtube_cloude/gui_qt_cli.py
 
-      # ── Rename ──
-      - name: Rename binaries
+      # ── Package: rename + platform bundles (.exe / .tar.xz + .AppImage / .dmg) ──
+      - name: Package artifacts
         shell: bash
         run: |
+          set -e
           TAG="${{ inputs.version }}"
           ARTIFACT="${{ matrix.artifact }}"
           mkdir -p dist
 
-          # Find CLI binary
-          find nuitka-build -name "youtube-cloude" -type f ! -name "*.exe" \
-            -exec cp {} dist/youtube-cloude \; 2>/dev/null || true
-          find nuitka-build -name "youtube-cloude.exe" -type f \
-            -exec cp {} dist/youtube-cloude.exe \; 2>/dev/null || true
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            [ -f nuitka-build/youtube-cloude.exe ] && \
+              mv nuitka-build/youtube-cloude.exe "dist/youtube-cloude-${TAG}-${ARTIFACT}.exe"
+            [ -f nuitka-build/youtube-cloude-gui.exe ] && \
+              mv nuitka-build/youtube-cloude-gui.exe "dist/youtube-cloude-gui-${TAG}-${ARTIFACT}.exe"
 
-          # Find GUI binary
-          find nuitka-build -name "youtube-cloude-gui" -type f ! -name "*.exe" \
-            -exec cp {} dist/youtube-cloude-gui \; 2>/dev/null || true
-          find nuitka-build -name "youtube-cloude-gui.exe" -type f \
-            -exec cp {} dist/youtube-cloude-gui.exe \; 2>/dev/null || true
+          elif [ "$RUNNER_OS" = "Linux" ]; then
+            # Portable .tar.xz fallbacks
+            [ -d nuitka-build/youtube-cloude.dist ] && \
+              tar -C nuitka-build -cJf "dist/youtube-cloude-${TAG}-${ARTIFACT}.tar.xz" youtube-cloude.dist
+            [ -d nuitka-build/youtube-cloude-gui.dist ] && \
+              tar -C nuitka-build -cJf "dist/youtube-cloude-gui-${TAG}-${ARTIFACT}.tar.xz" youtube-cloude-gui.dist
 
-          # Rename with version
-          if [ "${{ runner.os }}" = "Windows" ]; then
-            [ -f dist/youtube-cloude.exe ] && \
-              mv dist/youtube-cloude.exe "dist/youtube-cloude-${TAG}-${ARTIFACT}.exe"
-            [ -f dist/youtube-cloude-gui.exe ] && \
-              mv dist/youtube-cloude-gui.exe "dist/youtube-cloude-gui-${TAG}-${ARTIFACT}.exe"
-          else
-            [ -f dist/youtube-cloude ] && \
-              mv dist/youtube-cloude "dist/youtube-cloude-${TAG}-${ARTIFACT}"
-            [ -f dist/youtube-cloude-gui ] && \
-              mv dist/youtube-cloude-gui "dist/youtube-cloude-gui-${TAG}-${ARTIFACT}"
+            # .AppImage (Komi Store format)
+            curl -sL \
+              https://github.com/AppImage/appimagetool/releases/download/continuous/appimagetool-x86_64.AppImage \
+              -o /tmp/appimagetool
+            chmod +x /tmp/appimagetool
+
+            for APP in youtube-cloude youtube-cloude-gui; do
+              [ -d "nuitka-build/${APP}.dist" ] || continue
+              rm -rf AppDir && mkdir -p AppDir/usr
+              cp -a "nuitka-build/${APP}.dist/." AppDir/usr/
+              printf '%s\n' \
+                '#!/bin/sh' \
+                'HERE="$(dirname "$(readlink -f "$0")")"' \
+                'exec "$HERE/usr/APPBIN" "$@"' > AppDir/AppRun
+              sed -i "s/APPBIN/${APP}/" AppDir/AppRun
+              chmod +x AppDir/AppRun
+              printf '%s\n' \
+                '[Desktop Entry]' \
+                'Name=YouTube-Cloude' \
+                "Exec=${APP}" \
+                "Icon=${APP}" \
+                'Type=Application' \
+                'Categories=Utility;' > "AppDir/${APP}.desktop"
+              python -c "import sys; from PIL import Image, ImageDraw; img=Image.new('RGB',(256,256),(255,255,255)); d=ImageDraw.Draw(img); d.ellipse((16,16,240,240),fill=(230,0,0)); img.save('AppDir/%s.png' % sys.argv[1])" "${APP}"
+              ARCH=x86_64 /tmp/appimagetool --appimage-extract-and-run \
+                AppDir "dist/${APP}-${TAG}-${ARTIFACT}.AppImage"
+              rm -rf AppDir
+            done
+
+          elif [ "$RUNNER_OS" = "macOS" ]; then
+            # .dmg (Komi Store format)
+            for APP in youtube-cloude youtube-cloude-gui; do
+              [ -d "nuitka-build/${APP}.dist" ] || continue
+              rm -rf stage && mkdir -p stage
+              cp -a "nuitka-build/${APP}.dist/." stage/
+              ln -sf /Applications "stage/Applications"
+              hdiutil create -volname "YouTube-Cloude" -srcfolder stage -ov \
+                -format UDZO "dist/${APP}-${TAG}-${ARTIFACT}.dmg"
+              rm -rf stage
+            done
           fi
 
           echo "=== Build artifacts ==="
@@ -342,9 +382,9 @@ jobs:
             **Desktop** — compiled with Nuitka (Python → C → machine code):
             | Platform | CLI | GUI |
             |----------|-----|-----|
-            | **Linux** (amd64) | `youtube-cloude-*-linux-amd64` | `youtube-cloude-gui-*-linux-amd64` |
+            | **Linux** (amd64) | `youtube-cloude-*-linux-amd64.AppImage` / `.tar.xz` | `youtube-cloude-gui-*-linux-amd64.AppImage` / `.tar.xz` |
             | **Windows** (amd64) | `youtube-cloude-*-windows-amd64.exe` | `youtube-cloude-gui-*-windows-amd64.exe` |
-            | **macOS** (arm64) | `youtube-cloude-*-macos-arm64` | `youtube-cloude-gui-*-macos-arm64` |
+            | **macOS** (arm64) | `youtube-cloude-*-macos-arm64.dmg` | `youtube-cloude-gui-*-macos-arm64.dmg` |
 
             **Android** — native APK (Kivy + Buildozer):
             | Platform | APK |
@@ -358,8 +398,9 @@ jobs:
             ```
 
             ### Desktop GUI
-            - **Linux/macOS**: `./youtube-cloude-gui-*`
             - **Windows**: double-click `youtube-cloude-gui-*.exe`
+            - **Linux**: make `youtube-cloude-gui-*.AppImage` executable (`chmod +x`) and run it
+            - **macOS**: open `youtube-cloude-gui-*.dmg`
 
             ### Android
             - Install APK → grant permissions → use GUI
