@@ -56,9 +56,11 @@ class YouTubeEncoder:
         self.format_name = g['name']
 
         if key and str(key).strip():
-            self.key: Optional[bytes] = derive_key(str(key))
+            self._passphrase: Optional[str] = str(key)
+            self.key: Optional[bytes] = derive_key(str(key))  # legacy, kept for reference
             self.use_encryption = True
         else:
+            self._passphrase = None
             self.key = None
             self.use_encryption = False
 
@@ -171,28 +173,43 @@ class YouTubeEncoder:
             return False
 
         if self.use_encryption:
-            iv = generate_iv()
-            encrypted_data = encrypt_data(data, self.key, iv)
-            iv_hex = iv.hex()
-            print("  Data encrypted (AES-256-CBC)")
+            # New: PBKDF2 + AES-GCM (authenticated). Legacy CBC kept for decoding.
+            from .core import (
+                generate_salt, generate_nonce, derive_key_pbkdf2,
+                encrypt_data_gcm, PBKDF2_ITERATIONS,
+            )
+            # self.key is legacy SHA256 key; derive fresh PBKDF2 key from passphrase
+            # Need original passphrase — stored as self._passphrase
+            passphrase = getattr(self, '_passphrase', None) or ''
+            salt = generate_salt()
+            nonce = generate_nonce()
+            pbkdf2_key = derive_key_pbkdf2(passphrase, salt, PBKDF2_ITERATIONS)
+            ciphertext, tag = encrypt_data_gcm(data, pbkdf2_key, nonce)
+            encrypted_data = ciphertext
+            salt_hex = salt.hex()
+            nonce_hex = nonce.hex()
+            tag_hex = tag.hex()
+            iv_hex = None  # not used for GCM
+            print(f"  Data encrypted (AES-256-GCM, PBKDF2 {PBKDF2_ITERATIONS} iters)")
         else:
             encrypted_data = data
+            salt_hex = nonce_hex = tag_hex = None
             iv_hex = None
 
         # CRC32 of encrypted data for integrity check
         data_crc = crc32_hex(encrypted_data)
 
-        # Header: FORMAT:YTV2:FILE:name:SIZE:123:ENC_SIZE:456:IV:hex...:CRC:abcdef12|
-        if iv_hex:
+        # Header
+        if self.use_encryption:
             header = (
                 f"FORMAT:{self.format_name}:FILE:{original_filename}:"
                 f"SIZE:{len(data)}:ENC_SIZE:{len(encrypted_data)}:"
-                f"IV:{iv_hex}:CRC:{data_crc}|"
+                f"SALT:{salt_hex}:NONCE:{nonce_hex}:TAG:{tag_hex}:CRC:{data_crc}|"
             )
         else:
             header = f"FORMAT:{self.format_name}:FILE:{original_filename}:SIZE:{len(data)}:CRC:{data_crc}|"
         try:
-            header_bytes = header.encode('latin-1')
+            header_bytes = header.encode('utf-8')
         except UnicodeEncodeError:
             print("  Invalid characters in filename")
             return False

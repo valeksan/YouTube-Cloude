@@ -212,8 +212,9 @@ MAX_FILE_SIZES: dict[str, int] = {
 MAX_FILE_SIZE: int = 100 * 1024 * 1024  # fallback for direct callers
 
 
-# ── AES-256-CBC encryption / decryption ─────────────────────────────────────
-# Based on PR #10 by @Verdgil: https://github.com/KorocheVolgin/YouTube-Cloude/pull/10
+# ── AES encryption ─────────────────────────────────────────────────────────
+# Legacy: AES-256-CBC with SHA256 KDF (PR #10 by @Verdgil) kept for
+# backward compatibility. New code uses AES-256-GCM + PBKDF2.
 # Uses pycryptodome (pip install pycryptodome)
 
 def _get_aes():
@@ -230,37 +231,62 @@ def _get_aes():
 
 
 def generate_iv() -> bytes:
-    """Generate a cryptographically random 16-byte IV for AES-CBC."""
+    """Generate a cryptographically random 16-byte IV for AES-CBC (legacy)."""
     return os.urandom(16)
 
 
+def generate_salt() -> bytes:
+    """Generate a 16-byte random salt for PBKDF2."""
+    return os.urandom(16)
+
+
+def generate_nonce() -> bytes:
+    """Generate a 12-byte random nonce for AES-GCM."""
+    return os.urandom(12)
+
+
 def derive_key(key_str: str) -> bytes:
-    """Derive a 32-byte AES-256 key from a passphrase via SHA-256."""
+    """Legacy: derive a 32-byte key via single SHA-256 (kept for decoding old files)."""
     import hashlib
     return hashlib.sha256(key_str.encode('utf-8')).digest()
 
 
-def encrypt_data(data: bytes, key: bytes, iv: bytes) -> bytes:
-    """AES-256-CBC encrypt *data* with *key* and *iv*.
+PBKDF2_ITERATIONS: int = 200_000
 
-    *key* must be 32 bytes (use ``derive_key``).
-    *iv* must be 16 bytes (use ``generate_iv``).
-    Returns ciphertext (padded to AES block size).
-    """
+
+def derive_key_pbkdf2(key_str: str, salt: bytes, iterations: int = PBKDF2_ITERATIONS) -> bytes:
+    """Derive a 32-byte key via PBKDF2-HMAC-SHA256."""
+    import hashlib
+    return hashlib.pbkdf2_hmac('sha256', key_str.encode('utf-8'), salt, iterations, dklen=32)
+
+
+def encrypt_data(data: bytes, key: bytes, iv: bytes) -> bytes:
+    """Legacy AES-256-CBC encrypt (kept for decoding old files)."""
     AES, pad, _ = _get_aes()
     cipher = AES.new(key, AES.MODE_CBC, iv)
     return cipher.encrypt(pad(data, AES.block_size))
 
 
 def decrypt_data(data: bytes, key: bytes, iv: bytes) -> bytes:
-    """AES-256-CBC decrypt *data* with *key* and *iv*.
-
-    *key* must be 32 bytes, *iv* must be 16 bytes.
-    Returns unpadded plaintext.
-    """
+    """Legacy AES-256-CBC decrypt (kept for decoding old files)."""
     AES, _, unpad = _get_aes()
     cipher = AES.new(key, AES.MODE_CBC, iv)
     return unpad(cipher.decrypt(data), AES.block_size)
+
+
+def encrypt_data_gcm(data: bytes, key: bytes, nonce: bytes) -> tuple[bytes, bytes]:
+    """AES-256-GCM encrypt. Returns (ciphertext, tag). No padding."""
+    AES, _, _ = _get_aes()
+    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+    ciphertext, tag = cipher.encrypt_and_digest(data)
+    return ciphertext, tag
+
+
+def decrypt_data_gcm(ciphertext: bytes, key: bytes, nonce: bytes, tag: bytes) -> bytes:
+    """AES-256-GCM decrypt. Raises ValueError on authentication failure."""
+    AES, _, _ = _get_aes()
+    cipher = AES.new(key, AES.MODE_GCM, nonce=nonce)
+    return cipher.decrypt_and_verify(ciphertext, tag)
 
 
 # ── Bit / byte conversions ─────────────────────────────────────────────────

@@ -40,8 +40,10 @@ class YouTubeDecoder:
 
         import hashlib
         if key and str(key).strip():
-            self.key: Optional[bytes] = derive_key(str(key))
+            self._passphrase: Optional[str] = str(key)
+            self.key: Optional[bytes] = derive_key(str(key))  # legacy fallback
         else:
+            self._passphrase = None
             self.key = None
 
         self.is_ytv3 = (format_name or '').lower() == 'ytv3'
@@ -341,19 +343,25 @@ class YouTubeDecoder:
             print("  Warning: EOF marker not found")
 
         # Parse header — supports multiple generations:
-        #   AES+CRC:  FORMAT:YTV2:FILE:n:SIZE:123:ENC_SIZE:456:IV:hex:CRC:abcd|
+        #   GCM:      FORMAT:..:FILE:n:SIZE:123:ENC_SIZE:456:SALT:..:NONCE:..:TAG:..:CRC:abcd|
+        #   AES+CRC:  FORMAT:YTV2:FILE:n:SIZE:123:ENC_SIZE:456:IV:hex:CRC:abcd| (legacy CBC)
         #   AES:      FORMAT:YTV2:FILE:n:SIZE:123:ENC_SIZE:456:IV:hex|
         #   CRC:      FORMAT:YTV2:FILE:n:SIZE:123:CRC:abcd|
         #   Plain:    FORMAT:YTV2:FILE:n:SIZE:123|
         #   Legacy:   FILE:n:SIZE:123|  (backward compat, XOR era)
-        data_str = bytes_data[:1000].decode('latin-1', errors='ignore')
+        data_str = bytes_data[:2000].decode('utf-8', errors='ignore')
+        if 'FORMAT:' not in data_str:
+            data_str = bytes_data[:2000].decode('latin-1', errors='ignore')
 
         # Try patterns from most specific to least specific
         patterns = [
-            # AES + CRC (newest)
+            # GCM (new) — PBKDF2 + AES-GCM
+            (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):ENC_SIZE:(\d+):SALT:([0-9a-fA-F]{32}):NONCE:([0-9a-fA-F]{24}):TAG:([0-9a-fA-F]{32}):CRC:([0-9a-fA-F]{8})\|',
+             'gcm'),
+            # AES + CRC (legacy CBC)
             (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):ENC_SIZE:(\d+):IV:([0-9a-fA-F]{32}):CRC:([0-9a-fA-F]{8})\|',
              'aes_crc'),
-            # AES only
+            # AES only (legacy)
             (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):ENC_SIZE:(\d+):IV:([0-9a-fA-F]{32})\|',
              'aes'),
             # CRC only (pre-AES)
@@ -369,6 +377,9 @@ class YouTubeDecoder:
 
         expected_crc: Optional[str] = None
         iv_hex: Optional[str] = None
+        salt_hex: Optional[str] = None
+        nonce_hex: Optional[str] = None
+        tag_hex: Optional[str] = None
         enc_size: Optional[int] = None
         header_format = None
         filename = None
@@ -381,7 +392,16 @@ class YouTubeDecoder:
             if match:
                 matched_type = htype
                 header_str = match.group(0)
-                if htype == 'aes_crc':
+                if htype == 'gcm':
+                    header_format = match.group(1)
+                    filename = match.group(2)
+                    filesize = int(match.group(3))
+                    enc_size = int(match.group(4))
+                    salt_hex = match.group(5)
+                    nonce_hex = match.group(6)
+                    tag_hex = match.group(7)
+                    expected_crc = match.group(8).lower()
+                elif htype == 'aes_crc':
                     header_format = match.group(1)
                     filename = match.group(2)
                     filesize = int(match.group(3))
@@ -429,13 +449,25 @@ class YouTubeDecoder:
 
         print(f"\n  Header found: {filename}, size: {filesize} bytes")
         print(f"  Header type:  {matched_type}")
+        if salt_hex:
+            print(f"  SALT:         {salt_hex}")
+            print(f"  NONCE:        {nonce_hex}")
+            print(f"  TAG:          {tag_hex}")
         if iv_hex:
-            print(f"  AES IV:       {iv_hex}")
+            print(f"  AES IV:       {iv_hex} (legacy CBC)")
         if expected_crc:
             print(f"  CRC32:        {expected_crc}")
 
-        header_bytes_enc = header_str.encode('latin-1')
-        header_pos = bytes_data.find(header_bytes_enc)
+        # header bytes — try utf-8 first (new), fallback latin-1 (old)
+        try:
+            header_bytes_enc = header_str.encode('utf-8')
+            header_pos = bytes_data.find(header_bytes_enc)
+            if header_pos < 0:
+                header_bytes_enc = header_str.encode('latin-1')
+                header_pos = bytes_data.find(header_bytes_enc)
+        except Exception:
+            header_bytes_enc = header_str.encode('latin-1', errors='ignore')
+            header_pos = bytes_data.find(header_bytes_enc)
 
         if header_pos >= 0:
             # Use enc_size if available, otherwise use filesize
@@ -445,23 +477,41 @@ class YouTubeDecoder:
                 header_pos + len(header_bytes_enc) + data_len
             ]
 
-            if self.key and iv_hex:
-                # AES-256-CBC decryption
+            if salt_hex and nonce_hex and tag_hex:
+                # New: AES-256-GCM + PBKDF2
+                if self._passphrase:
+                    from .core import derive_key_pbkdf2, decrypt_data_gcm, PBKDF2_ITERATIONS
+                    try:
+                        salt = bytes.fromhex(salt_hex)
+                        nonce = bytes.fromhex(nonce_hex)
+                        tag = bytes.fromhex(tag_hex)
+                        gcm_key = derive_key_pbkdf2(self._passphrase, salt, PBKDF2_ITERATIONS)
+                        file_data = decrypt_data_gcm(encrypted_data, gcm_key, nonce, tag)
+                        print("  Data decrypted (AES-256-GCM, PBKDF2)")
+                    except Exception as e:
+                        print(f"  GCM decryption failed: {e}")
+                        print("  Saving raw data instead...")
+                        file_data = encrypted_data
+                else:
+                    print("  Warning: GCM encrypted data but no key provided")
+                    file_data = encrypted_data
+            elif self.key and iv_hex:
+                # Legacy AES-256-CBC
                 iv = bytes.fromhex(iv_hex)
                 try:
                     file_data = decrypt_data(encrypted_data, self.key, iv)
-                    print("  Data decrypted (AES-256-CBC)")
+                    print("  Data decrypted (AES-256-CBC legacy)")
                 except Exception as e:
                     print(f"  Decryption failed: {e}")
                     print("  Saving raw data instead...")
                     file_data = encrypted_data
-            elif self.key and not iv_hex:
+            elif self.key and not iv_hex and not salt_hex:
                 # Legacy XOR (pre-AES headers)
                 print("  Warning: legacy XOR header detected, AES key cannot decrypt")
                 file_data = encrypted_data
             else:
                 file_data = encrypted_data
-                if iv_hex:
+                if salt_hex or iv_hex:
                     print("  Warning: encrypted data but no key provided")
                 else:
                     print("  Data not encrypted")
