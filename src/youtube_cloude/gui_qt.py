@@ -636,7 +636,8 @@ class SettingsPage(QWidget):
         self.format_combo = QComboBox()
         self.format_combo.addItem("YTV1 — Standard (6 FPS, 2852 blocks/frame)", "ytv1")
         self.format_combo.addItem("YTV2 — Dense (15 FPS, 24244 blocks/frame)", "ytv2")
-        self.format_combo.setCurrentIndex(1)  # default YTV2
+        self.format_combo.addItem("YTV3 — Resilient (30 FPS, RS + luma, yuv420p safe)", "ytv3")
+        self.format_combo.setCurrentIndex(2)  # default YTV3
         fmt_layout.addWidget(self.format_combo)
         layout.addWidget(fmt_group)
 

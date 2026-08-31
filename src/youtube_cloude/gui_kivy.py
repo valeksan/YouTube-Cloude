@@ -280,10 +280,11 @@ ScreenManager:
 
             Spinner:
                 id: format_spinner
-                text: 'YTV2 — Dense (15 FPS, 21× denser)'
+                text: 'YTV3 — Resilient (30 FPS, RS + luma)'
                 values: [
                     'YTV1 — Standard (6 FPS)',
                     'YTV2 — Dense (15 FPS, 21× denser)',
+                    'YTV3 — Resilient (30 FPS, RS + luma)',
                 ]
                 background_color: C('#161b22')
                 color: C('#c9d1d9')
@@ -377,7 +378,7 @@ class YouTubeCloudeApp(App):
     """Kivy app for YouTube-Cloude."""
 
     # Current settings
-    format_name = StringProperty('ytv2')
+    format_name = StringProperty('ytv3')
     interlace = BooleanProperty(False)
     key = StringProperty('')
 
@@ -392,7 +393,12 @@ class YouTubeCloudeApp(App):
     # ── Settings ──────────────────────────────────────────────────────
     def _get_settings(self) -> dict:
         spinner_text = self.root.ids.format_spinner.text
-        fmt = 'ytv1' if 'YTV1' in spinner_text else 'ytv2'
+        if 'YTV1' in spinner_text:
+            fmt = 'ytv1'
+        elif 'YTV3' in spinner_text:
+            fmt = 'ytv3'
+        else:
+            fmt = 'ytv2'
         return {
             'format': fmt,
             'interlace': self.root.ids.interlace_switch.active,

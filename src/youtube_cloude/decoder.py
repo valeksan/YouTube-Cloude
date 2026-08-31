@@ -17,10 +17,10 @@ from typing import Optional, Callable
 import numpy as np
 
 from .core import (
-    WIDTH, HEIGHT, COLORS, EOF_BYTES,
-    get_format, compute_grid, detect_format,
+    WIDTH, HEIGHT, COLORS, GRAY_COLORS, GRAY_THRESHOLDS, EOF_BYTES,
+    get_format, compute_grid, detect_format, detect_format_by_palette,
     decrypt_data, derive_key,
-    blocks_to_bytes, data_to_blocks,
+    blocks_to_bytes, data_to_blocks, blocks_to_bytes_2bit, rs_decode,
     verify_crc32, deinterlace_frame,
 )
 from .video_io import probe_video, read_frames, resize_frame, bgr_to_gray
@@ -44,7 +44,11 @@ class YouTubeDecoder:
         else:
             self.key = None
 
-        self.colors = COLORS
+        self.is_ytv3 = (format_name or '').lower() == 'ytv3'
+        if self.is_ytv3:
+            self.colors = GRAY_COLORS
+        else:
+            self.colors = COLORS
         self.color_values = np.array(list(self.colors.values()), dtype=np.int32)
         self.color_keys = list(self.colors.keys())
         self.color_cache: dict[tuple, str] = {}
@@ -69,6 +73,11 @@ class YouTubeDecoder:
         """Set grid parameters from a format dict."""
         g = compute_grid(fmt)
         self.format_name = g['name']
+        self.is_ytv3 = g['name'] == 'YTV3'
+        self.colors = GRAY_COLORS if self.is_ytv3 else COLORS
+        self.color_values = np.array(list(self.colors.values()), dtype=np.int32)
+        self.color_keys = list(self.colors.keys())
+        self.color_cache = {}
         self.block_height = g['block_height']
         self.block_width = g['block_width']
         self.spacing = g['spacing']
@@ -139,7 +148,7 @@ class YouTubeDecoder:
 
     # ── Fast colour lookup ──────────────────────────────────────────────
     def color_to_bits_fast(self, color: np.ndarray) -> str:
-        """Map a BGR colour (np.ndarray) to its 4-bit string, using a cache."""
+        """Map a BGR colour to its bit string (4-bit YTV1/2, 2-bit YTV3)."""
         color_key = (int(color[0]), int(color[1]), int(color[2]))
 
         if color_key in self.color_cache:
@@ -148,7 +157,22 @@ class YouTubeDecoder:
 
         self.cache_misses += 1
 
-        # Quick path for dominant blue
+        if self.is_ytv3:
+            # Luma-only: average channels (they are equal for gray) or use mean
+            gray = int((int(color[0]) + int(color[1]) + int(color[2])) / 3)
+            t0, t1, t2 = GRAY_THRESHOLDS
+            if gray < t0:
+                result = '00'
+            elif gray < t1:
+                result = '01'
+            elif gray < t2:
+                result = '10'
+            else:
+                result = '11'
+            self.color_cache[color_key] = result
+            return result
+
+        # Quick path for dominant blue (YTV1/2)
         if color[0] > 200 and color[1] < 50 and color[2] < 50:
             self.color_cache[color_key] = '0000'
             return '0000'
@@ -247,6 +271,15 @@ class YouTubeDecoder:
                     detected_ms = self._detect_marker_size(first_frame)
                     print(f"  Detected marker size: {detected_ms}px")
                     self._configure_format(detect_format(detected_ms))
+                    # YTV2 and YTV3 share marker_size 16 — disambiguate by palette
+                    if detected_ms == 16:
+                        try:
+                            pal_fmt = detect_format_by_palette(first_frame)
+                            if pal_fmt['name'] == 'YTV3':
+                                self._configure_format(pal_fmt)
+                                print(f"  Palette suggests YTV3 (grayscale)")
+                        except Exception:
+                            pass
                     print(f"  Auto-detected format: {self.format_name}")
                     print(f"  Grid: {self.blocks_x} x {self.blocks_y} blocks")
                 else:
@@ -290,7 +323,13 @@ class YouTubeDecoder:
         )
         print(f"  Frames processed: {frames_processed}")
 
-        bytes_data = blocks_to_bytes(all_blocks)
+        if self.is_ytv3:
+            raw_rs = blocks_to_bytes_2bit(all_blocks)
+            print(f"  Raw RS bytes: {len(raw_rs)} (2-bit blocks)")
+            bytes_data = rs_decode(raw_rs)
+            print(f"  RS decoded: {len(bytes_data)} bytes")
+        else:
+            bytes_data = blocks_to_bytes(all_blocks)
         print(f"  Bytes recovered: {len(bytes_data)}")
 
         eof_pos = self.find_eof_marker(bytes_data)

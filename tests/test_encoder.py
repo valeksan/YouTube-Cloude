@@ -143,7 +143,7 @@ class TestFormatDetection:
 
     def test_get_format_invalid(self):
         with pytest.raises(ValueError):
-            get_format('ytv3')
+            get_format('ytv99')
 
     def test_compute_grid_ytv1(self):
         g = compute_grid(YTV1)

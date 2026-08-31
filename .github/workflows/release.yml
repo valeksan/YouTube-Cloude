@@ -142,6 +142,7 @@ jobs:
           python -m nuitka \
             --standalone $ONEFILE \
             --include-package=youtube_cloude \
+            --include-package=reedsolo \
             --output-filename=youtube-cloude \
             --output-dir=nuitka-build \
             --assume-yes-for-downloads \
@@ -161,6 +162,7 @@ jobs:
             --standalone $ONEFILE \
             --enable-plugin=pyside6 \
             --include-package=youtube_cloude \
+            --include-package=reedsolo \
             --include-package-data=PySide6 \
             --output-filename=youtube-cloude-gui \
             --output-dir=nuitka-build \

@@ -19,10 +19,11 @@ from typing import Optional, Callable
 import numpy as np
 
 from .core import (
-    WIDTH, HEIGHT, COLORS, EOF_MARKER, EOF_BYTES,
+    WIDTH, HEIGHT, COLORS, GRAY_COLORS, EOF_MARKER, EOF_BYTES,
     get_format, compute_grid, MAX_FILE_SIZES,
     encrypt_data, generate_iv, derive_key,
-    data_to_blocks, sanitize_filename, validate_input_file,
+    data_to_blocks, data_to_blocks_2bit, rs_encode,
+    sanitize_filename, validate_input_file,
     crc32_hex, interlace_frame,
 )
 from .video_io import save_frame_png, png_sequence_to_mp4
@@ -61,7 +62,14 @@ class YouTubeEncoder:
             self.key = None
             self.use_encryption = False
 
-        self.colors = COLORS
+        self.is_ytv3 = g['name'] == 'YTV3'
+        if self.is_ytv3:
+            if self.interlace:
+                print("  Note: interlace is ignored for YTV3 (luma-only, yuv420p safe)")
+                self.interlace = False
+            self.colors = GRAY_COLORS
+        else:
+            self.colors = COLORS
         self.eof_marker = EOF_MARKER
         self.eof_bytes = EOF_BYTES
 
@@ -69,6 +77,8 @@ class YouTubeEncoder:
         print(f"YouTube ENCODER ({self.format_name} | {self.fps} FPS)")
         print("=" * 60)
         print(f"  Grid: {self.blocks_x} x {self.blocks_y} blocks per region")
+        if self.is_ytv3:
+            print(f"  Palette: Grayscale 2-bit (yuv420p resilient) + RS(255,223)")
         print(f"  FPS:  {self.fps}")
         print(f"  Encryption: {'AES-256-CBC' if self.use_encryption else 'OFF'}")
         print(f"  Interlace:  {'ON' if self.interlace else 'OFF'}")
@@ -121,7 +131,11 @@ class YouTubeEncoder:
         return True
 
     def bits_to_color(self, bits: str) -> tuple:
-        """Map a 4-bit string to its palette colour."""
+        """Map a bit string to its palette colour (4-bit for YTV1/2, 2-bit for YTV3)."""
+        if self.is_ytv3:
+            while len(bits) < 2:
+                bits = '0' + bits
+            return self.colors.get(bits, (255, 0, 0))
         while len(bits) < 4:
             bits = '0' + bits
         return self.colors.get(bits, (255, 0, 0))
@@ -184,10 +198,20 @@ class YouTubeEncoder:
             return False
         print(f"  Header: {header}")
 
-        header_blocks = data_to_blocks(header_bytes)
-        data_blocks = data_to_blocks(encrypted_data)
-        eof_blocks = data_to_blocks(self.eof_bytes)
-        all_blocks = header_blocks + data_blocks + eof_blocks
+        if self.is_ytv3:
+            # YTV3: RS-encode the whole payload (header+data+EOF), then 2-bit blocks
+            raw_payload = header_bytes + encrypted_data + self.eof_bytes
+            rs_payload = rs_encode(raw_payload)
+            all_blocks = data_to_blocks_2bit(rs_payload)
+            print(f"  RS payload: {len(raw_payload)} -> {len(rs_payload)} bytes (+{len(rs_payload)-len(raw_payload)} parity)")
+            header_blocks = []  # not used separately for YTV3
+            data_blocks = []
+            eof_blocks = []
+        else:
+            header_blocks = data_to_blocks(header_bytes)
+            data_blocks = data_to_blocks(encrypted_data)
+            eof_blocks = data_to_blocks(self.eof_bytes)
+            all_blocks = header_blocks + data_blocks + eof_blocks
 
         print(f"  Total blocks: {len(all_blocks)}")
         print(f"  EOF marker:   {len(eof_blocks)} blocks")
@@ -223,29 +247,38 @@ class YouTubeEncoder:
                     end_idx = min(start_idx + self.blocks_per_region, len(all_blocks))
                     frame_blocks = all_blocks[start_idx:end_idx]
 
-                    # Primary region
-                    for idx, bits in enumerate(frame_blocks):
-                        y = idx // self.blocks_x
-                        x = idx % self.blocks_x
-                        if y < self.blocks_y:
-                            color = self.bits_to_color(bits)
-                            self.draw_block(frame, x, y, color)
+                    if self.is_ytv3:
+                        # YTV3: single region, no replication
+                        for idx, bits in enumerate(frame_blocks):
+                            y = idx // self.blocks_x
+                            x = idx % self.blocks_x
+                            if y < self.blocks_y:
+                                color = self.bits_to_color(bits)
+                                self.draw_block(frame, x, y, color)
+                    else:
+                        # Primary region
+                        for idx, bits in enumerate(frame_blocks):
+                            y = idx // self.blocks_x
+                            x = idx % self.blocks_x
+                            if y < self.blocks_y:
+                                color = self.bits_to_color(bits)
+                                self.draw_block(frame, x, y, color)
 
-                    # Reserve 1
-                    for idx, bits in enumerate(frame_blocks):
-                        y = idx // self.blocks_x
-                        x = idx % self.blocks_x + self.blocks_x
-                        if x < self.blocks_x * 2 and y < self.blocks_y:
-                            color = self.bits_to_color(bits)
-                            self.draw_block(frame, x, y, color)
+                        # Reserve 1
+                        for idx, bits in enumerate(frame_blocks):
+                            y = idx // self.blocks_x
+                            x = idx % self.blocks_x + self.blocks_x
+                            if x < self.blocks_x * 2 and y < self.blocks_y:
+                                color = self.bits_to_color(bits)
+                                self.draw_block(frame, x, y, color)
 
-                    # Reserve 2
-                    for idx, bits in enumerate(frame_blocks):
-                        y = idx // self.blocks_x + self.blocks_y
-                        x = idx % self.blocks_x
-                        if x < self.blocks_x and y < self.blocks_y * 2:
-                            color = self.bits_to_color(bits)
-                            self.draw_block(frame, x, y, color)
+                        # Reserve 2
+                        for idx, bits in enumerate(frame_blocks):
+                            y = idx // self.blocks_x + self.blocks_y
+                            x = idx % self.blocks_x
+                            if x < self.blocks_x and y < self.blocks_y * 2:
+                                color = self.bits_to_color(bits)
+                                self.draw_block(frame, x, y, color)
 
                 frame_file = os.path.join(temp_dir, f"frame_{frame_num:05d}.png")
                 if self.interlace:
@@ -254,9 +287,18 @@ class YouTubeEncoder:
 
             # Convert to MP4
             print("\n  Converting to MP4...")
-            pix_fmt = 'yuv444p' if self.interlace else 'yuv420p'
-            crf = '0' if self.interlace else '23'
-            preset = 'ultrafast' if self.interlace else 'slow'
+            if self.is_ytv3:
+                pix_fmt = 'yuv420p'
+                crf = '18'
+                preset = 'medium'
+            elif self.interlace:
+                pix_fmt = 'yuv444p'
+                crf = '0'
+                preset = 'ultrafast'
+            else:
+                pix_fmt = 'yuv420p'
+                crf = '23'
+                preset = 'slow'
             print(f"  FFmpeg: CRF {crf}, preset {preset}, pix_fmt {pix_fmt}")
 
             input_pattern = os.path.join(temp_dir, 'frame_%05d.png')

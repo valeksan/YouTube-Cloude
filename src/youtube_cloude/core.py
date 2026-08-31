@@ -36,10 +36,24 @@ YTV2: dict = {
     'marker_size': 16,
 }
 
+# ── YTV3 format (RS + grayscale, yuv420p resilient, no interlace) ─────────
+# 2 bit/block luma-only palette survives YouTube yuv420p chroma subsampling.
+# Single region + Reed-Solomon(255,223) instead of wasteful 3x repetition.
+# spacing=2 gives 2px gap — survives 2x2 chroma subsample without bleeding.
+YTV3: dict = {
+    'name': 'YTV3',
+    'fps': 30,
+    'block_height': 8,
+    'block_width': 8,
+    'spacing': 2,
+    'marker_size': 16,
+}
+
 # ── All known formats ───────────────────────────────────────────────────────
 FORMATS: dict[str, dict] = {
     'ytv1': YTV1,
     'ytv2': YTV2,
+    'ytv3': YTV3,
 }
 
 
@@ -64,6 +78,8 @@ def compute_grid(fmt: dict) -> dict:
     bx = (WIDTH - 2 * ms) // (bw + sp)
     by = (HEIGHT - 2 * ms) // (bh + sp)
     bpr = bx * by
+    # YTV3 uses single region + RS; YTV1/YTV2 use 3x replication
+    bpf = bpr if fmt.get('name') == 'YTV3' else bpr * 3
     return {
         'name': fmt['name'],
         'fps': fmt['fps'],
@@ -74,20 +90,77 @@ def compute_grid(fmt: dict) -> dict:
         'blocks_x': bx,
         'blocks_y': by,
         'blocks_per_region': bpr,
-        'blocks_per_frame': bpr * 3,
+        'blocks_per_frame': bpf,
     }
 
 
 def detect_format(marker_size: int) -> dict:
     """Auto-detect format from marker size observed in the first frame.
 
-    YTV1 markers are 80px, YTV2 are 16px.
+    YTV1 markers are 80px, YTV2/YTV3 are 16px (disambiguated by palette).
     """
     for fmt in FORMATS.values():
         if fmt['marker_size'] == marker_size:
+            # YTV2 and YTV3 share marker_size 16 — prefer YTV2 for
+            # marker-only detection; palette detection in decoder
+            # upgrades to YTV3 when grayscale is observed.
+            if marker_size == 16:
+                return YTV2
             return fmt
     # Fallback: small marker → YTV2, large → YTV1
     return YTV2 if marker_size < 40 else YTV1
+
+
+def detect_format_by_palette(frame) -> dict:
+    """Distinguish YTV2 vs YTV3 by sampling block colours (grayscale vs colour).
+
+    YTV3 uses only luma grays (R≈G≈B), YTV2 uses saturated colours.
+    We sample block centres for both grids and look for saturated blocks;
+    if any saturated colour is found it is YTV2, otherwise YTV3.
+    Sparse data (few blocks) can look all-gray, so we require multiple
+    saturated hits to decide YTV2.
+    """
+    import numpy as np
+    # Sample block centres for YTV2 grid (covers YTV3 centres as well with overlap)
+    for fmt in (YTV2, YTV3):
+        g = compute_grid(fmt)
+        ms, bw, bh, sp = g['marker_size'], g['block_width'], g['block_height'], g['spacing']
+        bx, by = g['blocks_x'], g['blocks_y']
+        saturated = 0
+        gray = 0
+        examined = 0
+        for y_idx in range(0, min(by, 40)):
+            for x_idx in range(0, min(bx, 60)):
+                cx = ms + x_idx * (bw + sp) + bw // 2
+                cy = ms + y_idx * (bh + sp) + bh // 2
+                if cy >= frame.shape[0] or cx >= frame.shape[1]:
+                    continue
+                # average 3x3 centre to reduce compression noise
+                region = frame[max(0, cy-1):cy+2, max(0, cx-1):cx+2]
+                if region.size == 0:
+                    continue
+                b, g_, r = region.mean(axis=(0, 1)).astype(int)
+                # ignore near-black background (empty blocks) — not informative
+                if max(b, g_, r) < 15:
+                    continue
+                examined += 1
+                spread = int(max(b, g_, r) - min(b, g_, r))
+                if spread > 40:
+                    saturated += 1
+                else:
+                    gray += 1
+                if examined >= 200:
+                    break
+            if examined >= 200:
+                break
+        # Decide: need several saturated blocks to confidently say YTV2
+        if examined >= 20:
+            if saturated >= 5:
+                return YTV2
+            if gray >= 15 and saturated == 0:
+                return YTV3
+        # Not enough signal — fall through to try next grid
+    return YTV2  # conservative fallback
 
 # ── 16-colour palette (4-bit string -> BGR tuple) ──────────────────────────
 COLORS: dict[str, tuple[int, int, int]] = {
@@ -109,6 +182,17 @@ COLORS: dict[str, tuple[int, int, int]] = {
     '1111': (255, 255, 255),
 }
 
+# ── YTV3 grayscale palette (2-bit string -> BGR tuple, luma-only) ─────────
+# Survives YouTube yuv420p chroma subsampling — only Y channel matters.
+GRAY_COLORS: dict[str, tuple[int, int, int]] = {
+    '00': (0, 0, 0),
+    '01': (85, 85, 85),
+    '10': (170, 170, 170),
+    '11': (255, 255, 255),
+}
+# Thresholds for fast gray classification (mid-points between levels)
+GRAY_THRESHOLDS: tuple[int, int, int] = (42, 127, 212)
+
 # ── End-of-file marker ─────────────────────────────────────────────────────
 EOF_MARKER: str = "\u2588" * 64
 EOF_BYTES: bytes = EOF_MARKER.encode('utf-8')
@@ -119,10 +203,11 @@ DANGEROUS_EXTENSIONS: set[str] = {
 }
 
 # ── Max file size defaults (based on format density) ────────────────────────
-# YTV1: 100 MB → ~3.4h video. YTV2: 500 MB → ~48 min video.
+# YTV1: 100 MB → ~3.4h video. YTV2: 500 MB → ~48 min video. YTV3: 500 MB.
 MAX_FILE_SIZES: dict[str, int] = {
     'ytv1': 100 * 1024 * 1024,   # 100 MB
     'ytv2': 500 * 1024 * 1024,   # 500 MB
+    'ytv3': 500 * 1024 * 1024,   # 500 MB (single region + RS overhead ~13%)
 }
 MAX_FILE_SIZE: int = 100 * 1024 * 1024  # fallback for direct callers
 
@@ -202,6 +287,85 @@ def blocks_to_bytes(blocks: list[str]) -> bytes:
             except ValueError:
                 buf.append(0)
     return bytes(buf)
+
+
+# ── YTV3 2-bit conversions ─────────────────────────────────────────────────
+def data_to_blocks_2bit(data: bytes) -> list[str]:
+    """Convert bytes to 2-bit block strings (YTV3, 4 blocks per byte)."""
+    blocks: list[str] = []
+    for byte in data:
+        blocks.append(f"{(byte >> 6) & 0x3:02b}")
+        blocks.append(f"{(byte >> 4) & 0x3:02b}")
+        blocks.append(f"{(byte >> 2) & 0x3:02b}")
+        blocks.append(f"{byte & 0x3:02b}")
+    return blocks
+
+
+def blocks_to_bytes_2bit(blocks: list[str]) -> bytes:
+    """Convert 2-bit block strings back to bytes (YTV3)."""
+    all_bits = ''.join(blocks)
+    # pad to multiple of 8
+    if len(all_bits) % 8 != 0:
+        all_bits = all_bits.ljust(((len(all_bits) // 8) + 1) * 8, '0')
+    buf = bytearray()
+    for i in range(0, len(all_bits) - 7, 8):
+        chunk = all_bits[i:i + 8]
+        if len(chunk) == 8:
+            try:
+                buf.append(int(chunk, 2))
+            except ValueError:
+                buf.append(0)
+    return bytes(buf)
+
+
+# ── Reed-Solomon helpers (YTV3) ────────────────────────────────────────────
+RS_NSYM: int = 32   # parity bytes
+RS_K: int = 223     # data bytes per chunk (255-32)
+RS_N: int = 255     # total bytes per chunk
+
+
+def _get_rs_codec():
+    """Lazy import reedsolo RSCodec."""
+    try:
+        from reedsolo import RSCodec  # type: ignore
+        return RSCodec(RS_NSYM)
+    except ImportError:
+        raise ImportError(
+            "reedsolo is required for YTV3. Install: pip install reedsolo"
+        )
+
+
+def rs_encode(data: bytes) -> bytes:
+    """RS(255,223) encode — splits into 223-byte chunks, appends 32 parity each."""
+    rs = _get_rs_codec()
+    out = bytearray()
+    for i in range(0, len(data), RS_K):
+        chunk = data[i:i + RS_K]
+        # reedsolo handles short last chunk (pads internally with zeros,
+        # but we encode exactly the chunk length)
+        out.extend(rs.encode(chunk))
+    return bytes(out)
+
+
+def rs_decode(data: bytes) -> bytes:
+    """RS(255,223) decode — corrects up to 16 byte errors per 255-byte chunk."""
+    rs = _get_rs_codec()
+    out = bytearray()
+    for i in range(0, len(data), RS_N):
+        chunk = data[i:i + RS_N]
+        if not chunk:
+            break
+        try:
+            decoded = rs.decode(chunk)
+            # reedsolo returns (message, ecc) or just message depending on version
+            if isinstance(decoded, tuple):
+                decoded = decoded[0]
+            out.extend(bytes(decoded))
+        except Exception:
+            # Uncorrectable chunk — return raw chunk without parity for best-effort
+            # (strip parity bytes, keep data portion)
+            out.extend(chunk[:RS_K])
+    return bytes(out)
 
 
 # ── File helpers ───────────────────────────────────────────────────────────
