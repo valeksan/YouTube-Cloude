@@ -343,7 +343,7 @@ class YouTubeDecoder:
             print("  Warning: EOF marker not found")
 
         # Parse header — supports multiple generations:
-        #   GCM:      FORMAT:..:FILE:n:SIZE:123:ENC_SIZE:456:SALT:..:NONCE:..:TAG:..:CRC:abcd|
+        #   GCM:      FORMAT:..:FILE:n:SIZE:123:ENC_SIZE:456:SALT:..:NONCE:..:TAG:..:CRC:abcd| (+ optional :COMPRESS:zlib before ENC_SIZE/CRC)
         #   AES+CRC:  FORMAT:YTV2:FILE:n:SIZE:123:ENC_SIZE:456:IV:hex:CRC:abcd| (legacy CBC)
         #   AES:      FORMAT:YTV2:FILE:n:SIZE:123:ENC_SIZE:456:IV:hex|
         #   CRC:      FORMAT:YTV2:FILE:n:SIZE:123:CRC:abcd|
@@ -355,19 +355,30 @@ class YouTubeDecoder:
 
         # Try patterns from most specific to least specific
         patterns = [
+            # GCM compressed — PBKDF2 + AES-GCM with :COMPRESS:zlib
+            (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):COMPRESS:([^:]+):ENC_SIZE:(\d+):SALT:([0-9a-fA-F]{32}):NONCE:([0-9a-fA-F]{24}):TAG:([0-9a-fA-F]{32}):CRC:([0-9a-fA-F]{8})\|',
+             'gcm_compress'),
             # GCM (new) — PBKDF2 + AES-GCM
             (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):ENC_SIZE:(\d+):SALT:([0-9a-fA-F]{32}):NONCE:([0-9a-fA-F]{24}):TAG:([0-9a-fA-F]{32}):CRC:([0-9a-fA-F]{8})\|',
              'gcm'),
-            # AES + CRC (legacy CBC)
+            # AES + CRC (legacy CBC) — with optional COMPRESS
+            (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):COMPRESS:([^:]+):ENC_SIZE:(\d+):IV:([0-9a-fA-F]{32}):CRC:([0-9a-fA-F]{8})\|',
+             'aes_crc_compress'),
             (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):ENC_SIZE:(\d+):IV:([0-9a-fA-F]{32}):CRC:([0-9a-fA-F]{8})\|',
              'aes_crc'),
-            # AES only (legacy)
+            # AES only (legacy) with COMPRESS
+            (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):COMPRESS:([^:]+):ENC_SIZE:(\d+):IV:([0-9a-fA-F]{32})\|',
+             'aes_compress'),
             (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):ENC_SIZE:(\d+):IV:([0-9a-fA-F]{32})\|',
              'aes'),
-            # CRC only (pre-AES)
+            # CRC only (pre-AES) with COMPRESS
+            (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):COMPRESS:([^:]+):CRC:([0-9a-fA-F]{8})\|',
+             'crc_compress'),
             (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):CRC:([0-9a-fA-F]{8})\|',
              'crc'),
-            # Plain FORMAT
+            # Plain with COMPRESS
+            (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):COMPRESS:([^:]+)\|',
+             'plain_compress'),
             (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+)\|',
              'plain'),
             # Legacy
@@ -387,12 +398,23 @@ class YouTubeDecoder:
         header_str = None
         matched_type = None
 
+        compress_algo: Optional[str] = None
         for pat, htype in patterns:
             match = re.search(pat, data_str)
             if match:
                 matched_type = htype
                 header_str = match.group(0)
-                if htype == 'gcm':
+                if htype == 'gcm_compress':
+                    header_format = match.group(1)
+                    filename = match.group(2)
+                    filesize = int(match.group(3))
+                    compress_algo = match.group(4)
+                    enc_size = int(match.group(5))
+                    salt_hex = match.group(6)
+                    nonce_hex = match.group(7)
+                    tag_hex = match.group(8)
+                    expected_crc = match.group(9).lower()
+                elif htype == 'gcm':
                     header_format = match.group(1)
                     filename = match.group(2)
                     filesize = int(match.group(3))
@@ -401,6 +423,14 @@ class YouTubeDecoder:
                     nonce_hex = match.group(6)
                     tag_hex = match.group(7)
                     expected_crc = match.group(8).lower()
+                elif htype == 'aes_crc_compress':
+                    header_format = match.group(1)
+                    filename = match.group(2)
+                    filesize = int(match.group(3))
+                    compress_algo = match.group(4)
+                    enc_size = int(match.group(5))
+                    iv_hex = match.group(6)
+                    expected_crc = match.group(7).lower()
                 elif htype == 'aes_crc':
                     header_format = match.group(1)
                     filename = match.group(2)
@@ -408,17 +438,35 @@ class YouTubeDecoder:
                     enc_size = int(match.group(4))
                     iv_hex = match.group(5)
                     expected_crc = match.group(6).lower()
+                elif htype == 'aes_compress':
+                    header_format = match.group(1)
+                    filename = match.group(2)
+                    filesize = int(match.group(3))
+                    compress_algo = match.group(4)
+                    enc_size = int(match.group(5))
+                    iv_hex = match.group(6)
                 elif htype == 'aes':
                     header_format = match.group(1)
                     filename = match.group(2)
                     filesize = int(match.group(3))
                     enc_size = int(match.group(4))
                     iv_hex = match.group(5)
+                elif htype == 'crc_compress':
+                    header_format = match.group(1)
+                    filename = match.group(2)
+                    filesize = int(match.group(3))
+                    compress_algo = match.group(4)
+                    expected_crc = match.group(5).lower()
                 elif htype == 'crc':
                     header_format = match.group(1)
                     filename = match.group(2)
                     filesize = int(match.group(3))
                     expected_crc = match.group(4).lower()
+                elif htype == 'plain_compress':
+                    header_format = match.group(1)
+                    filename = match.group(2)
+                    filesize = int(match.group(3))
+                    compress_algo = match.group(4)
                 elif htype == 'plain':
                     header_format = match.group(1)
                     filename = match.group(2)
@@ -449,6 +497,8 @@ class YouTubeDecoder:
 
         print(f"\n  Header found: {filename}, size: {filesize} bytes")
         print(f"  Header type:  {matched_type}")
+        if compress_algo:
+            print(f"  Compress:     {compress_algo}")
         if salt_hex:
             print(f"  SALT:         {salt_hex}")
             print(f"  NONCE:        {nonce_hex}")
@@ -515,6 +565,18 @@ class YouTubeDecoder:
                     print("  Warning: encrypted data but no key provided")
                 else:
                     print("  Data not encrypted")
+
+            # ── Decompress if header indicated compression ──────────────
+            if compress_algo and file_data:
+                if compress_algo.lower() == 'zlib':
+                    from .core import decompress_data
+                    try:
+                        file_data = decompress_data(file_data)
+                        print(f"  Decompressed (zlib): {len(encrypted_data)} -> {len(file_data)} bytes")
+                    except Exception as e:
+                        print(f"  Decompression failed: {e}")
+                else:
+                    print(f"  Warning: unknown compress algo '{compress_algo}'")
 
             output_path = os.path.join(output_dir, filename)
             counter = 1

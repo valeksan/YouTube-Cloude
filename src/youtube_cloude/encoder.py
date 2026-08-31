@@ -35,11 +35,13 @@ class YouTubeEncoder:
     def __init__(self, key: Optional[str] = None,
                  format_name: str = 'ytv1',
                  interlace: bool = False,
-                 max_file_size: Optional[int] = None) -> None:
+                 max_file_size: Optional[int] = None,
+                 compress: bool = False) -> None:
         self.width = WIDTH
         self.height = HEIGHT
         self.max_file_size = max_file_size or MAX_FILE_SIZES.get(format_name, 100 * 1024 * 1024)
         self.interlace = interlace
+        self.compress = compress
 
         # Format-specific parameters
         fmt = get_format(format_name)
@@ -82,8 +84,9 @@ class YouTubeEncoder:
         if self.is_ytv3:
             print(f"  Palette: Grayscale 2-bit (yuv420p resilient) + RS(255,223)")
         print(f"  FPS:  {self.fps}")
-        print(f"  Encryption: {'AES-256-CBC' if self.use_encryption else 'OFF'}")
+        print(f"  Encryption: {'AES-256-GCM PBKDF2' if self.use_encryption else 'OFF'}")
         print(f"  Interlace:  {'ON' if self.interlace else 'OFF'}")
+        print(f"  Compress:   {'zlib' if self.compress else 'OFF'}")
         print(f"  Max file:   {self.max_file_size / 1024 / 1024:.0f} MB")
 
     # ── Drawing helpers (pure numpy) ───────────────────────────────────
@@ -172,14 +175,25 @@ class YouTubeEncoder:
             print(f"  Read error: {e}")
             return False
 
+        orig_size = len(data)
+        # ── Compression (zlib) before encryption ──────────────────────────
+        was_compressed = False
+        if self.compress:
+            from .core import compress_data
+            compressed = compress_data(data)
+            if len(compressed) < len(data):
+                data = compressed
+                was_compressed = True
+                print(f"  Compressed: {orig_size} -> {len(data)} bytes ({len(data)/orig_size*100:.1f}%)")
+            else:
+                print(f"  Compress skipped (would enlarge: {len(compressed)} >= {orig_size})")
+
         if self.use_encryption:
             # New: PBKDF2 + AES-GCM (authenticated). Legacy CBC kept for decoding.
             from .core import (
                 generate_salt, generate_nonce, derive_key_pbkdf2,
                 encrypt_data_gcm, PBKDF2_ITERATIONS,
             )
-            # self.key is legacy SHA256 key; derive fresh PBKDF2 key from passphrase
-            # Need original passphrase — stored as self._passphrase
             passphrase = getattr(self, '_passphrase', None) or ''
             salt = generate_salt()
             nonce = generate_nonce()
@@ -199,15 +213,20 @@ class YouTubeEncoder:
         # CRC32 of encrypted data for integrity check
         data_crc = crc32_hex(encrypted_data)
 
-        # Header
+        # Header — include COMPRESS:zlib when payload was compressed
+        compress_field = ":COMPRESS:zlib" if was_compressed else ""
         if self.use_encryption:
             header = (
                 f"FORMAT:{self.format_name}:FILE:{original_filename}:"
-                f"SIZE:{len(data)}:ENC_SIZE:{len(encrypted_data)}:"
+                f"SIZE:{orig_size}{compress_field}:ENC_SIZE:{len(encrypted_data)}:"
                 f"SALT:{salt_hex}:NONCE:{nonce_hex}:TAG:{tag_hex}:CRC:{data_crc}|"
             )
         else:
-            header = f"FORMAT:{self.format_name}:FILE:{original_filename}:SIZE:{len(data)}:CRC:{data_crc}|"
+            header = f"FORMAT:{self.format_name}:FILE:{original_filename}:SIZE:{orig_size}{compress_field}:CRC:{data_crc}|"
+            if was_compressed:
+                # need ENC_SIZE for symmetry? no, SIZE is orig, CRC is of compressed
+                # for plain compressed, header already has COMPRESS
+                pass
         try:
             header_bytes = header.encode('utf-8')
         except UnicodeEncodeError:

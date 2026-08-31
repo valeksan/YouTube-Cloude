@@ -313,6 +313,27 @@ ScreenManager:
                     font_size: sp(11)
                     size_hint_x: 0.4
 
+            BoxLayout:
+                size_hint_y: None
+                height: dp(44)
+                spacing: dp(8)
+
+                Label:
+                    text: 'Compress (zlib):'
+                    color: C('#8b949e')
+                    size_hint_x: 0.4
+
+                Switch:
+                    id: compress_switch
+                    active: False
+                    size_hint_x: 0.2
+
+                Label:
+                    text: 'Smaller video if compressible'
+                    color: C('#484f58')
+                    font_size: sp(11)
+                    size_hint_x: 0.4
+
             Label:
                 text: 'Encryption key (optional):'
                 color: C('#8b949e')
@@ -402,6 +423,7 @@ class YouTubeCloudeApp(App):
         return {
             'format': fmt,
             'interlace': self.root.ids.interlace_switch.active,
+            'compress': self.root.ids.compress_switch.active,
             'key': self.root.ids.key_input.text.strip() or None,
         }
 
@@ -457,6 +479,7 @@ class YouTubeCloudeApp(App):
                     settings['key'],
                     format_name=settings['format'],
                     interlace=settings['interlace'],
+                    compress=settings['compress'],
                 )
 
                 def cb(done: int, total: int):

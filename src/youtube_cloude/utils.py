@@ -73,6 +73,16 @@ def add_interlace_arg(subparser: argparse._SubParsersAction) -> None:  # type: i
     )
 
 
+def add_compress_arg(subparser: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
+    """Add --compress flag."""
+    subparser.add_argument(
+        '--compress',
+        action='store_true',
+        default=False,
+        help='Compress file with zlib before encoding (auto-skipped if would enlarge)',
+    )
+
+
 def add_max_size_arg(subparser: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     """Add max file size argument to *subparser*."""
     subparser.add_argument(
@@ -96,6 +106,7 @@ commands:
                  --key TEXT | --key-file PATH   encryption
                  --format ytv1|ytv2|ytv3        video format
                  --interlace                    better YouTube quality (ignored for YTV3)
+                 --compress                     zlib compress before encoding
                  --max-size MB                  file size limit
 
   encode-dir   Batch-encode all files in a directory
@@ -136,12 +147,13 @@ examples:
     add_key_args(enc)
     add_format_arg(enc)
     add_interlace_arg(enc)
+    add_compress_arg(enc)
     add_max_size_arg(enc)
 
     # encode-dir (batch mode)
     enc_dir = subparsers.add_parser(
         'encode-dir',
-        help='Batch-encode all files in a directory (--key, --format, --interlace, --max-size)',
+        help='Batch-encode all files in a directory (--key, --format, --interlace, --compress, --max-size)',
     )
     enc_dir.add_argument(
         'input_dir', metavar='DIR', help='Directory containing files to encode'
@@ -156,6 +168,7 @@ examples:
     add_key_args(enc_dir)
     add_format_arg(enc_dir)
     add_interlace_arg(enc_dir)
+    add_compress_arg(enc_dir)
     add_max_size_arg(enc_dir)
 
     # decode
@@ -184,7 +197,7 @@ examples:
         max_size = int(args.max_size * 1024 * 1024) if args.max_size else None
         encoder = YouTubeEncoder(
             key, format_name=args.format, interlace=args.interlace,
-            max_file_size=max_size,
+            max_file_size=max_size, compress=args.compress,
         )
         encoder.encode(args.input_file, args.output_file)
 
@@ -221,7 +234,7 @@ def _encode_dir(args: argparse.Namespace, key: Optional[str]) -> None:
     max_size = int(args.max_size * 1024 * 1024) if args.max_size else None
     encoder = YouTubeEncoder(
         key, format_name=args.format, interlace=args.interlace,
-        max_file_size=max_size,
+        max_file_size=max_size, compress=args.compress,
     )
 
     ok_count = 0

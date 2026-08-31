@@ -251,7 +251,7 @@ class EncodeWorker(QThread):
 
     def __init__(
         self, input_file: str, output_file: str,
-        key: Optional[str], fmt: str, interlace: bool,
+        key: Optional[str], fmt: str, interlace: bool, compress: bool = False,
     ):
         super().__init__()
         self.input_file = input_file
@@ -259,13 +259,14 @@ class EncodeWorker(QThread):
         self.key = key
         self.fmt = fmt
         self.interlace = interlace
+        self.compress = compress
 
     def run(self) -> None:
         try:
             from youtube_cloude.encoder import YouTubeEncoder
 
             encoder = YouTubeEncoder(self.key, format_name=self.fmt,
-                                     interlace=self.interlace)
+                                     interlace=self.interlace, compress=self.compress)
 
             def cb(done: int, total: int) -> None:
                 pct = int(done / total * 100) if total else 0
@@ -420,9 +421,10 @@ class EncodePage(QWidget):
             return {
                 'format': sp.format_combo.currentData() or 'ytv1',
                 'interlace': sp.interlace_check.isChecked(),
+                'compress': sp.compress_check.isChecked(),
                 'key': sp.key_edit.text().strip() or None,
             }
-        return {'format': 'ytv1', 'interlace': False, 'key': None}
+        return {'format': 'ytv1', 'interlace': False, 'compress': False, 'key': None}
 
     def _start_encode(self) -> None:
         input_file = self.input_edit.text().strip()
@@ -442,7 +444,7 @@ class EncodePage(QWidget):
 
         self._worker = EncodeWorker(
             input_file, output_file,
-            settings['key'], settings['format'], settings['interlace'],
+            settings['key'], settings['format'], settings['interlace'], settings['compress'],
         )
         self._worker.progress.connect(self._on_progress)
         self._worker.log.connect(self._on_log)
@@ -649,8 +651,13 @@ class SettingsPage(QWidget):
         )
         layout.addWidget(self.interlace_check)
 
+        # ── Compression ──
+        self.compress_check = QCheckBox("Compress with zlib before encoding")
+        self.compress_check.setToolTip("Compress file with zlib before encoding.\nAuto-skipped if would enlarge. Saves huge space for text/logs.")
+        layout.addWidget(self.compress_check)
+
         # ── Encryption ──
-        enc_group = QGroupBox("Encryption (AES-256-CBC)")
+        enc_group = QGroupBox("Encryption (AES-256-GCM)")
         enc_layout = QVBoxLayout(enc_group)
 
         enc_layout.addWidget(QLabel("Encryption key (optional):"))

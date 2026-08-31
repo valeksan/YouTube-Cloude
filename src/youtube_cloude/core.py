@@ -443,6 +443,17 @@ def read_key_from_file(key_file: str = 'key.txt') -> Optional[str]:
     return None
 
 
+# ── Compression helpers (zlib, pure-python, no external 7z needed) ──────
+def compress_data(data: bytes, level: int = 6) -> bytes:
+    """Compress *data* with zlib (level 1-9). Returns compressed bytes."""
+    return zlib.compress(data, level)
+
+
+def decompress_data(data: bytes) -> bytes:
+    """Decompress zlib-compressed *data*."""
+    return zlib.decompress(data)
+
+
 # ── CRC32 helpers ──────────────────────────────────────────────────────────
 def crc32_hex(data: bytes) -> str:
     """Return CRC32 of *data* as an 8-char lowercase hex string."""
