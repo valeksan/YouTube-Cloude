@@ -474,19 +474,19 @@ class YouTubeCloudeApp(App):
 
         def _worker():
             try:
-                from youtube_cloude.encoder import YouTubeEncoder
-                encoder = YouTubeEncoder(
-                    settings['key'],
-                    format_name=settings['format'],
+                from youtube_cloude.gui_service import EncodeSettings, encode_file
+                enc_settings = EncodeSettings(
+                    format=settings['format'],
                     interlace=settings['interlace'],
                     compress=settings['compress'],
+                    key=settings['key'],
                 )
 
                 def cb(done: int, total: int):
                     pct = int(done / total * 100) if total else 0
                     Clock.schedule_once(lambda dt: self._update_enc_progress(pct))
 
-                ok = encoder.encode(input_file, output_file, progress_callback=cb)
+                ok = encode_file(input_file, output_file, enc_settings, progress_callback=cb)
                 Clock.schedule_once(lambda dt: self._encode_done(ok, output_file))
             except Exception as e:
                 Clock.schedule_once(lambda dt: self._encode_error(str(e)))
@@ -527,9 +527,9 @@ class YouTubeCloudeApp(App):
 
         def _worker():
             try:
-                from youtube_cloude.decoder import YouTubeDecoder
-                decoder = YouTubeDecoder(
-                    settings['key'],
+                from youtube_cloude.gui_service import DecodeSettings, decode_file
+                dec_settings = DecodeSettings(
+                    key=settings['key'],
                     interlace=settings['interlace'],
                 )
 
@@ -537,7 +537,7 @@ class YouTubeCloudeApp(App):
                     pct = int(done / total * 100) if total else 0
                     Clock.schedule_once(lambda dt: self._update_dec_progress(pct))
 
-                ok = decoder.decode(video_file, output_dir, progress_callback=cb)
+                ok = decode_file(video_file, output_dir, dec_settings, progress_callback=cb)
                 Clock.schedule_once(lambda dt: self._decode_done(ok))
             except Exception as e:
                 Clock.schedule_once(lambda dt: self._decode_error(str(e)))

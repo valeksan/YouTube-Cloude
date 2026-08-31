@@ -263,10 +263,12 @@ class EncodeWorker(QThread):
 
     def run(self) -> None:
         try:
-            from youtube_cloude.encoder import YouTubeEncoder
+            from youtube_cloude.gui_service import EncodeSettings, encode_file
 
-            encoder = YouTubeEncoder(self.key, format_name=self.fmt,
-                                     interlace=self.interlace, compress=self.compress)
+            settings = EncodeSettings(
+                format=self.fmt, interlace=self.interlace,
+                compress=self.compress, key=self.key,
+            )
 
             def cb(done: int, total: int) -> None:
                 pct = int(done / total * 100) if total else 0
@@ -274,9 +276,10 @@ class EncodeWorker(QThread):
                 self.log.emit(f"  Frame progress: {pct}%")
 
             self.log.emit(f"Starting encode ({self.fmt.upper()}, "
-                          f"interlace={'ON' if self.interlace else 'OFF'})...")
-            ok = encoder.encode(self.input_file, self.output_file,
-                                progress_callback=cb)
+                          f"interlace={'ON' if self.interlace else 'OFF'}, "
+                          f"compress={'ON' if self.compress else 'OFF'})...")
+            ok = encode_file(self.input_file, self.output_file,
+                             settings, progress_callback=cb)
             if ok:
                 self.finished.emit(True, self.output_file)
             else:
@@ -303,9 +306,9 @@ class DecodeWorker(QThread):
 
     def run(self) -> None:
         try:
-            from youtube_cloude.decoder import YouTubeDecoder
+            from youtube_cloude.gui_service import DecodeSettings, decode_file
 
-            decoder = YouTubeDecoder(self.key, interlace=self.interlace)
+            settings = DecodeSettings(key=self.key, interlace=self.interlace)
 
             def cb(done: int, total: int) -> None:
                 pct = int(done / total * 100) if total else 0
@@ -313,8 +316,8 @@ class DecodeWorker(QThread):
                 self.log.emit(f"  Block progress: {pct}%")
 
             self.log.emit("Starting decode...")
-            ok = decoder.decode(self.video_file, self.output_dir,
-                                progress_callback=cb)
+            ok = decode_file(self.video_file, self.output_dir,
+                             settings, progress_callback=cb)
             self.finished.emit(ok)
         except Exception as e:
             self.error.emit(str(e))

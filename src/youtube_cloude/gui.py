@@ -17,8 +17,11 @@ import tkinter as tk
 from tkinter import ttk, filedialog, messagebox, scrolledtext
 from typing import Optional
 
-from .encoder import YouTubeEncoder
-from .decoder import YouTubeDecoder
+import warnings
+
+from .encoder import YouTubeEncoder  # noqa: F401  legacy import kept for compat
+from .decoder import YouTubeDecoder  # noqa: F401
+from .gui_service import EncodeSettings, DecodeSettings, encode_file, decode_file
 
 
 # ── Dark theme colours ──────────────────────────────────────────────────────
@@ -38,6 +41,11 @@ class App(tk.Tk):
     """Main application window with tabbed Encode / Decode / Settings."""
 
     def __init__(self) -> None:
+        warnings.warn(
+            "gui (Tkinter) is deprecated — use gui_qt (PySide6) instead. "
+            "Tkinter GUI will be removed in a future release.",
+            DeprecationWarning, stacklevel=2,
+        )
         super().__init__()
         self.title("\U0001f3a5 YouTube File Storage")
         self.geometry("720x620")
@@ -208,16 +216,20 @@ class App(tk.Tk):
         ttk.Label(frame, text="Video format:").grid(
             row=0, column=0, sticky='w', padx=8, pady=(14, 2)
         )
-        self.format_var = tk.StringVar(value='ytv1')
+        self.format_var = tk.StringVar(value='ytv3')
         fmt_frame = ttk.Frame(frame)
         fmt_frame.grid(row=1, column=0, sticky='w', padx=8)
         ttk.Radiobutton(
-            fmt_frame, text='YTV1 (6 FPS, standard)',
+            fmt_frame, text='YTV1 (6 FPS)',
             variable=self.format_var, value='ytv1',
-        ).pack(side='left', padx=(0, 16))
+        ).pack(side='left', padx=(0, 12))
         ttk.Radiobutton(
-            fmt_frame, text='YTV2 (15 FPS, 21x denser)',
+            fmt_frame, text='YTV2 (15 FPS)',
             variable=self.format_var, value='ytv2',
+        ).pack(side='left', padx=(0, 12))
+        ttk.Radiobutton(
+            fmt_frame, text='YTV3 (30 FPS, RS)',
+            variable=self.format_var, value='ytv3',
         ).pack(side='left')
 
         self.interlace_var = tk.BooleanVar(value=False)
@@ -227,12 +239,19 @@ class App(tk.Tk):
             variable=self.interlace_var,
         ).grid(row=2, column=0, columnspan=2, sticky='w', padx=8, pady=(6, 2))
 
+        self.compress_var = tk.BooleanVar(value=False)
+        ttk.Checkbutton(
+            frame,
+            text='Compress with zlib before encoding',
+            variable=self.compress_var,
+        ).grid(row=3, column=0, columnspan=2, sticky='w', padx=8, pady=(2, 2))
+
         ttk.Label(frame, text="Encryption key (optional):").grid(
-            row=3, column=0, sticky='w', padx=8, pady=(14, 2)
+            row=4, column=0, sticky='w', padx=8, pady=(14, 2)
         )
         self.key_var = tk.StringVar()
         key_entry = ttk.Entry(frame, textvariable=self.key_var, width=50, show='*')
-        key_entry.grid(row=4, column=0, sticky='we', padx=8)
+        key_entry.grid(row=5, column=0, sticky='we', padx=8)
 
         self.show_key_var = tk.BooleanVar(value=False)
         ttk.Checkbutton(
@@ -242,10 +261,10 @@ class App(tk.Tk):
             command=lambda: key_entry.config(
                 show='' if self.show_key_var.get() else '*'
             ),
-        ).grid(row=4, column=1, padx=8)
+        ).grid(row=5, column=1, padx=8)
 
         info = (
-            "The key is hashed with SHA-256 before use.\n"
+            "Key: PBKDF2-HMAC-SHA256 + AES-256-GCM (legacy CBC still decodes).\n"
             "Leave blank to disable encryption.\n\n"
             "Credits:\n"
             "  @Hinderchik  - original concept\n"
@@ -254,7 +273,7 @@ class App(tk.Tk):
             "  @Maksim4081862 - GUI concepts"
         )
         ttk.Label(frame, text=info, justify='left').grid(
-            row=5, column=0, columnspan=2, sticky='w', padx=12, pady=16
+            row=6, column=0, columnspan=2, sticky='w', padx=12, pady=16
         )
 
         frame.columnconfigure(0, weight=1)
@@ -306,6 +325,7 @@ class App(tk.Tk):
         key = self.key_var.get().strip() or None
         fmt = self.format_var.get()
         interlace = self.interlace_var.get()
+        compress = self.compress_var.get()
 
         if not input_file:
             messagebox.showwarning("Input needed", "Please select a file to encode.")
@@ -317,13 +337,13 @@ class App(tk.Tk):
 
         def _worker() -> None:
             try:
-                encoder = YouTubeEncoder(key, format_name=fmt, interlace=interlace)
+                settings = EncodeSettings(format=fmt, interlace=interlace, compress=compress, key=key)
 
                 def _cb(done: int, total: int) -> None:
                     pct = int(done / total * 100) if total else 0
                     self.after(0, self._update_enc_progress, pct)
 
-                ok = encoder.encode(input_file, output_file, progress_callback=_cb)
+                ok = encode_file(input_file, output_file, settings, progress_callback=_cb)
                 self.after(
                     0,
                     self._encode_done,
@@ -370,13 +390,13 @@ class App(tk.Tk):
 
         def _worker() -> None:
             try:
-                decoder = YouTubeDecoder(key, interlace=interlace)
+                settings = DecodeSettings(key=key, interlace=interlace)
 
                 def _cb(done: int, total: int) -> None:
                     pct = int(done / total * 100) if total else 0
                     self.after(0, self._update_dec_progress, pct)
 
-                ok = decoder.decode(video_file, output_dir, progress_callback=_cb)
+                ok = decode_file(video_file, output_dir, settings, progress_callback=_cb)
                 self.after(0, self._decode_done, ok)
             except Exception as exc:
                 self.after(0, self._decode_error, str(exc))
