@@ -212,6 +212,12 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
+      - name: Pin pip version for p4a venv
+        shell: bash
+        run: |
+          printf 'pip<26.2\n' > "${{ github.workspace }}/pip-constraints.txt"
+          cat "${{ github.workspace }}/pip-constraints.txt"
+
       - uses: actions/setup-python@v5
         with:
           python-version: ${{ env.PYTHON_VERSION }}
@@ -262,12 +268,6 @@ jobs:
           p4a.local_recipes = recipes
           SPEC
           sed -i "s/TAGPLACEHOLDER/${TAG}/" buildozer.spec
-
-      - name: Pin pip version for p4a venv
-        shell: bash
-        run: |
-          printf 'pip<26.2\n' > "${{ github.workspace }}/pip-constraints.txt"
-          cat "${{ github.workspace }}/pip-constraints.txt"
 
       - name: Build Android APK
         shell: bash
