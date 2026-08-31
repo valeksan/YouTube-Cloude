@@ -73,14 +73,14 @@ This software is provided **"as is"** without warranty of any kind. The authors 
 
 ## Features
 
-- 🔐 **AES-256-CBC encryption** — optional key-based encryption (SHA-256 key derivation, random IV)
-- 🎞️ **Two formats** — YTV1 (standard) and YTV2 (21× denser)
-- 📊 **CRC32 integrity** — automatic verification on decode
-- 🔀 **Interlacing** — improved YouTube compression quality
-- 🖥️ **GUI** — PySide6 (Qt) interface with dark theme, responsive layout (desktop + mobile)
-- 📱 **Android** — Buildozer APK build, camera integration (coming soon)
+- 🔐 **AES-256-GCM encryption** — PBKDF2-HMAC-SHA256 (200k iters) + random salt/nonce/tag, legacy CBC still decodes
+- 🎞️ **Three formats** — YTV1 (standard), YTV2 (21× denser), **YTV3** (30 FPS, RS + luma, yuv420p-resilient)
+- 📊 **Reed-Solomon + CRC32** — RS(255,223) corrects 16 byte errors/chunk (YTV3) + CRC32 on all formats
+- 🔀 **Interlacing** — improved YouTube retention (YTV1/YTV2, ignored for YTV3)
+- 🗜️ **zlib compression** — `--compress` before encoding, auto-skipped if would enlarge
+- 🖥️ **GUI** — PySide6 (Qt) primary, unified `gui_service` layer; Tkinter deprecated, Kivy for Android
+- 📱 **Android** — Buildozer APK (arm64, API 33), Kivy GUI
 - 📦 **Batch mode** — encode entire directories at once
-- 🗜️ **7z compression** — optional pre-encode compression
 - 📤 **YouTube upload/download** — via yt-dlp and YouTube Data API v3
 
 ## Quick Start
@@ -108,16 +108,25 @@ brew install ffmpeg        # macOS
 # Basic encoding (YTV1 format)
 youtube-cloude encode secret.zip video.mp4
 
-# With encryption
+# With encryption (PBKDF2 + AES-GCM)
 youtube-cloude encode secret.zip video.mp4 --key "my-password"
 
 # YTV2 format (21× denser, 15 FPS)
 youtube-cloude encode secret.zip video.mp4 --format ytv2
 
-# With interlacing (better YouTube quality)
+# YTV3 format (30 FPS, RS + grayscale luma — best for YouTube, no interlace needed)
+youtube-cloude encode secret.zip video.mp4 --format ytv3
+
+# With compression (zlib, auto-skipped if would enlarge)
+youtube-cloude encode secret.zip video.mp4 --compress
+
+# YTV3 + GCM + compress (recommended for text/logs)
+youtube-cloude encode secret.zip video.mp4 --format ytv3 --key "my-password" --compress
+
+# With interlacing (YTV1/YTV2 only, better YouTube quality)
 youtube-cloude encode secret.zip video.mp4 --interlace
 
-# Override max file size (default: 100 MB for YTV1, 500 MB for YTV2)
+# Override max file size (default: 100 MB YTV1, 500 MB YTV2/YTV3)
 youtube-cloude encode big.iso video.mp4 --max-size 200
 
 # Or via Makefile
@@ -127,17 +136,17 @@ make run CMD="encode secret.zip video.mp4"
 ### Decode a Video
 
 ```bash
-# Auto-detects format, interlacing, and CRC from the video
+# Auto-detects format, interlacing, RS, compression and CRC from the video
 youtube-cloude decode video.mp4
 
-# With decryption key
+# With decryption key (PBKDF2 + GCM, legacy CBC also supported)
 youtube-cloude decode video.mp4 --key "my-password"
 ```
 
 ### Batch Encode a Directory
 
 ```bash
-youtube-cloude encode-dir ./my-data/ ./output/ --format ytv2 --interlace
+youtube-cloude encode-dir ./my-data/ ./output/ --format ytv3 --compress
 ```
 
 ### Launch GUI
@@ -171,17 +180,20 @@ make test-fast      # stop on first failure
 
 ## Format Comparison
 
-| Property | YTV1 | YTV2 |
-|----------|------|------|
-| Block size | 24×16 px | 8×8 px |
-| Spacing | 4 px | 1 px |
-| Markers | 80 px | 16 px |
-| Grid | 62×46 | 209×116 |
-| Blocks/frame | 2,852 | 24,244 |
-| FPS | 6 | 15 |
-| **Density** | **1×** | **21.3×** |
-| Max file (default) | 100 MB (~3.4h video) | 500 MB (~48 min video) |
-| Max file (override) | `--max-size 200` | `--max-size 200` |
+| Property | YTV1 | YTV2 | **YTV3** |
+|----------|------|------|----------|
+| Block size | 24×16 px | 8×8 px | 8×8 px |
+| Spacing | 4 px | 1 px | 2 px |
+| Markers | 80 px | 16 px | 16 px |
+| Grid | 62×46 | 209×116 | 188×104 |
+| Blocks/frame | 2,852 | 24,244 | 19,552 |
+| FPS | 6 | 15 | **30** |
+| Palette | 16 colours (4 bit) | 16 colours (4 bit) | **4 grays (2 bit luma)** |
+| ECC | none | 3× replication | **RS(255,223)** |
+| **Density** | **1×** | **21.3×** | **~16× + RS** |
+| yuv420p safe | No (needs interlace) | No (needs interlace) | **Yes** |
+| Max file (default) | 100 MB (~3.4h) | 500 MB (~48 min) | 500 MB (~32 min) |
+| Max file (override) | `--max-size 200` | `--max-size 200` | `--max-size 200` |
 
 ## Benchmark
 
@@ -277,18 +289,19 @@ Interlace requires **lossless encoding** (CRF 0) to preserve the exact block col
 ```
 YouTube-Cloude/
 ├── src/youtube_cloude/
-│   ├── __init__.py      # Package version (1.0.0)
+│   ├── __init__.py      # Package version (1.1.0)
 │   ├── __main__.py      # CLI entry point (python -m youtube_cloude)
 │   ├── cli.py           # PyInstaller CLI entry (absolute imports)
-│   ├── core.py          # Constants, CRC32, interlacing, encryption
-│   ├── encoder.py       # YouTubeEncoder class
-│   ├── decoder.py       # YouTubeDecoder class (auto-detect format)
-│   ├── utils.py         # CLI helpers, argparse
-│   ├── gui.py           # Tkinter GUI (dark theme)
+│   ├── core.py          # Constants, CRC32, interlacing, RS, encryption (PBKDF2+GCM)
+│   ├── encoder.py       # YouTubeEncoder class (YTV3, compress)
+│   ├── decoder.py       # YouTubeDecoder class (auto-detect YTV3, RS, GCM)
+│   ├── utils.py         # CLI helpers, argparse (--compress)
+│   ├── gui_service.py   # Shared service layer (unified GUI logic)
+│   ├── gui.py           # Tkinter GUI (deprecated, use Qt)
 │   ├── gui_cli.py       # Tkinter entry for PyInstaller
-│   ├── gui_qt.py        # PySide6 GUI (responsive, dark theme)
+│   ├── gui_qt.py        # PySide6 GUI (responsive, dark theme, primary)
 │   ├── gui_qt_cli.py    # PySide6 entry for PyInstaller
-│   ├── compress.py      # 7z compress/decompress
+│   ├── compress.py      # 7z compress/decompress (legacy)
 │   └── uploader.py      # YouTube upload (OAuth2) / download (yt-dlp)
 ├── tests/
 │   └── test_encoder.py  # 36 tests (unit + YouTube re-encoding simulation)
@@ -302,7 +315,7 @@ YouTube-Cloude/
 
 ## Encryption
 
-Files can be encrypted with AES-256-CBC before encoding:
+Files can be encrypted with **AES-256-GCM** (PBKDF2-HMAC-SHA256, 200k iters) before encoding — legacy `AES-CBC` files still decode:
 
 ```bash
 # Key from command line
@@ -314,7 +327,18 @@ youtube-cloude encode file.zip video.mp4
 youtube-cloude decode video.mp4   # key.txt auto-detected
 ```
 
-> ⚠️ **Warning:** Without the correct key, the decoded file will be garbage. The key is derived via SHA-256 and each encode generates a unique random IV.
+> ℹ️ New files use `SALT:NONCE:TAG` (GCM); old `IV` (CBC) files auto-fallback. Wrong key fails with `MAC check failed`.
+
+## Compression
+
+Optional zlib compression before encoding (auto-skipped if would enlarge):
+
+```bash
+youtube-cloude encode big.log video.mp4 --compress
+youtube-cloude encode big.log video.mp4 --format ytv3 --compress --key "secret"
+```
+
+Header carries `:COMPRESS:zlib` and the decoder decompresses transparently.
 
 ## Credits
 
