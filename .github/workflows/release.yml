@@ -246,6 +246,10 @@ jobs:
         shell: bash
         run: |
           TAG="${{ inputs.version }}"
+          # p4a requires a purely numeric version (it does int() on each
+          # dot-separated part), so strip a leading 'v' and any '-suffix'.
+          ANDROID_VERSION="${TAG#v}"
+          ANDROID_VERSION="${ANDROID_VERSION%%-*}"
           cat > buildozer.spec << 'SPEC'
           [app]
           title = YouTube-Cloude
@@ -254,7 +258,7 @@ jobs:
           source.dir = src
           source.include_exts = py,png,jpg,kv,atlas
           source.main = youtube_cloude.gui_kivy:main
-          version = TAGPLACEHOLDER
+          version = ANDROIDVERSIONPLACEHOLDER
           requirements = python3,kivy,numpy,pillow,pycryptodome,requests==2.25.1
           orientation = portrait
           fullscreen = 0
@@ -267,7 +271,8 @@ jobs:
           p4a.branch = master
           p4a.local_recipes = recipes
           SPEC
-          sed -i "s/TAGPLACEHOLDER/${TAG}/" buildozer.spec
+          sed -i "s/ANDROIDVERSIONPLACEHOLDER/${ANDROID_VERSION}/" buildozer.spec
+          echo "Android version: ${ANDROID_VERSION}"
 
       - name: Build Android APK
         shell: bash
