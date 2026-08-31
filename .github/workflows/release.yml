@@ -144,6 +144,10 @@ jobs:
       - name: Build GUI (Nuitka + PySide6)
         shell: bash
         run: |
+          NUITKA_FLAGS=""
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            NUITKA_FLAGS="--windows-console-mode=disable"
+          fi
           python -m nuitka \
             --standalone --onefile \
             --enable-plugin=pyside6 \
@@ -152,6 +156,7 @@ jobs:
             --output-filename=youtube-cloude-gui \
             --output-dir=nuitka-build \
             --assume-yes-for-downloads \
+            $NUITKA_FLAGS \
             src/youtube_cloude/gui_qt_cli.py
 
       # ── Rename ──

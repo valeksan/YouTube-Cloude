@@ -200,59 +200,57 @@ class YouTubeEncoder:
         print(f"  Temp dir: {temp_dir}")
 
         try:
-            for frame_num in range(frames_needed - 5):
+            guard_start = frames_needed - 5
+            for frame_num in range(frames_needed):
                 if progress_callback:
                     progress_callback(frame_num + 1, frames_needed)
-                print(f"\n  Frame {frame_num + 1}/{frames_needed}")
+
+                guard = frame_num >= guard_start
+                if guard:
+                    print(f"\n  Creating guard frame {frame_num - guard_start + 1}/5")
+                else:
+                    print(f"\n  Frame {frame_num + 1}/{frames_needed}")
 
                 frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
                 frame = self.draw_markers(frame)
 
-                start_idx = frame_num * self.blocks_per_region
-                end_idx = min(start_idx + self.blocks_per_region, len(all_blocks))
-                frame_blocks = all_blocks[start_idx:end_idx]
+                if guard:
+                    for y in range(self.blocks_y * 2):
+                        for x in range(self.blocks_x * 2):
+                            self.draw_block(frame, x, y, (255, 0, 0))
+                else:
+                    start_idx = frame_num * self.blocks_per_region
+                    end_idx = min(start_idx + self.blocks_per_region, len(all_blocks))
+                    frame_blocks = all_blocks[start_idx:end_idx]
 
-                # Primary region
-                for idx, bits in enumerate(frame_blocks):
-                    y = idx // self.blocks_x
-                    x = idx % self.blocks_x
-                    if y < self.blocks_y:
-                        color = self.bits_to_color(bits)
-                        self.draw_block(frame, x, y, color)
+                    # Primary region
+                    for idx, bits in enumerate(frame_blocks):
+                        y = idx // self.blocks_x
+                        x = idx % self.blocks_x
+                        if y < self.blocks_y:
+                            color = self.bits_to_color(bits)
+                            self.draw_block(frame, x, y, color)
 
-                # Reserve 1
-                for idx, bits in enumerate(frame_blocks):
-                    y = idx // self.blocks_x
-                    x = idx % self.blocks_x + self.blocks_x
-                    if x < self.blocks_x * 2 and y < self.blocks_y:
-                        color = self.bits_to_color(bits)
-                        self.draw_block(frame, x, y, color)
+                    # Reserve 1
+                    for idx, bits in enumerate(frame_blocks):
+                        y = idx // self.blocks_x
+                        x = idx % self.blocks_x + self.blocks_x
+                        if x < self.blocks_x * 2 and y < self.blocks_y:
+                            color = self.bits_to_color(bits)
+                            self.draw_block(frame, x, y, color)
 
-                # Reserve 2
-                for idx, bits in enumerate(frame_blocks):
-                    y = idx // self.blocks_x + self.blocks_y
-                    x = idx % self.blocks_x
-                    if x < self.blocks_x and y < self.blocks_y * 2:
-                        color = self.bits_to_color(bits)
-                        self.draw_block(frame, x, y, color)
+                    # Reserve 2
+                    for idx, bits in enumerate(frame_blocks):
+                        y = idx // self.blocks_x + self.blocks_y
+                        x = idx % self.blocks_x
+                        if x < self.blocks_x and y < self.blocks_y * 2:
+                            color = self.bits_to_color(bits)
+                            self.draw_block(frame, x, y, color)
 
                 frame_file = os.path.join(temp_dir, f"frame_{frame_num:05d}.png")
                 if self.interlace:
                     frame = interlace_frame(frame)
                 save_frame_png(frame, frame_file)
-
-            # Guard frames (blue)
-            print("\n  Creating guard frames...")
-            for i in range(5):
-                frame_num = frames_needed - 5 + i
-                frame = np.zeros((self.height, self.width, 3), dtype=np.uint8)
-                frame = self.draw_markers(frame)
-                for y in range(self.blocks_y * 2):
-                    for x in range(self.blocks_x * 2):
-                        self.draw_block(frame, x, y, (255, 0, 0))
-                frame_file = os.path.join(temp_dir, f"frame_{frame_num:05d}.png")
-                save_frame_png(frame, frame_file)
-                print(f"  Guard frame {i + 1}/5")
 
             # Convert to MP4
             print("\n  Converting to MP4...")
