@@ -162,6 +162,22 @@ make gui
 ```
 ```
 
+### Windows SmartScreen
+
+The `.exe` files in Releases are **unsigned** (no paid code-signing certificate). On first launch Windows may show:
+
+> **"Windows protected your PC" / "SmartScreen prevented an unrecognized app"**
+
+Click `More info` → `Run anyway` to start. Alternative: right-click the `.exe` → `Properties` → check `Unblock`, or in PowerShell:
+
+```powershell
+Unblock-File .\youtube-cloude-gui-*.exe
+# or for all downloads
+Get-ChildItem -Recurse | Unblock-File
+```
+
+The warning disappears after the file gains reputation (enough installs without detections). Future signed builds will not show this.
+
 ### Build Standalone Binaries
 
 ```bash
