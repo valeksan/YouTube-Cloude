@@ -75,8 +75,8 @@ This software is provided **"as is"** without warranty of any kind. The authors 
 
 - 🔐 **AES-256-GCM encryption** — PBKDF2-HMAC-SHA256 (200k iters) + random salt/nonce/tag, legacy CBC still decodes
 - 🎞️ **Three formats** — YTV1 (standard), YTV2 (21× denser), **YTV3** (30 FPS, RS + luma, yuv420p-resilient)
-- 📊 **Reed-Solomon + CRC32** — RS(255,223) corrects 16 byte errors/chunk (YTV3)[^rs] + CRC32 on all formats
-- 🔀 **Interlacing** — improved YouTube retention (YTV1/YTV2, ignored for YTV3)[^il]
+- 📊 **Reed-Solomon[^rs] + CRC32** — RS(255,223) corrects 16 byte errors/chunk (YTV3) + CRC32 on all formats
+- 🔀 **Interlacing[^il]** — improved YouTube retention (YTV1/YTV2, ignored for YTV3)
 - 🗜️ **zlib compression** — `--compress` before encoding, auto-skipped if would enlarge
 - 🖥️ **GUI** — PySide6 (Qt) primary, unified `gui_service` layer; Tkinter deprecated, Kivy for Android
 - 📱 **Android** — Buildozer APK (arm64, API 33), Kivy GUI
@@ -207,9 +207,9 @@ make test-fast      # stop on first failure
 | Blocks/frame | 2,852 | 24,244 | 19,552 |
 | FPS | 6 | 15 | **30** |
 | Palette | 16 colours (4 bit) | 16 colours (4 bit) | **4 grays (2 bit luma)** |
-| ECC | none | 3× replication | **RS(255,223)**[^rs] |
+| ECC | none | 3× replication | **RS[^rs](255,223)** |
 | **Density** | **1×** | **21.3×** | **~16× + RS** |
-| yuv420p safe | No (needs interlace)[^il] | No (needs interlace)[^il] | **Yes** |
+| yuv420p safe | No (needs interlace[^il]) | No (needs interlace[^il]) | **Yes** |
 | Max file (default) | 100 MB (~3.4h) | 500 MB (~48 min) | 500 MB (~32 min) |
 | Max file (override) | `--max-size 200` | `--max-size 200` | `--max-size 200` |
 
@@ -243,7 +243,7 @@ make test-fast      # stop on first failure
 - **Interlace produces 15× larger files** (yuv444p CRF 0) — YTV3 avoids this entirely
 - **Compress** (`--compress` zlib) on this incompressible PNG shows no gain (as expected); on text/logs yields 100–200× reduction (see §Compression)
 
-## How Interlace Works[^il]
+## How Interlace[^il] Works
 
 ### The Pipeline
 
