@@ -96,21 +96,31 @@ jobs:
         shell: bash
         run: pip install -e ".[dev,gui]" nuitka ordered-set "PySide6>=6.5"
 
+      - name: Cache ffmpeg (Linux)
+        if: runner.os == 'Linux'
+        id: cache-ffmpeg
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin
+          key: ffmpeg-amd64-static-v3
+
       # ── ffmpeg ──
       - name: Install ffmpeg (Linux)
+        if: runner.os == 'Linux' && steps.cache-ffmpeg.outputs.cache-hit != 'true'
+        shell: bash
+        run: |
+          for i in 1 2 3 4 5; do
+            curl -sfL --retry 3 --retry-delay 5 \
+              https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | \
+              tar -xJ --wildcards --strip-components=1 -C /usr/local/bin '*/ffmpeg' '*/ffprobe' && break || true
+            echo "Attempt $i failed, retrying in $((i*5))s..." >&2
+            sleep $((i*5))
+          done
+          command -v ffmpeg &>/dev/null || { echo "::error::ffmpeg install failed after retries"; exit 1; }
+      - name: Show ffmpeg version (Linux)
         if: runner.os == 'Linux'
         shell: bash
         run: |
-          if ! command -v ffmpeg &>/dev/null; then
-            for i in 1 2 3 4 5; do
-              curl -sfL --retry 3 --retry-delay 5 \
-                https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | \
-                tar -xJ --wildcards --strip-components=1 -C /usr/local/bin '*/ffmpeg' '*/ffprobe' && break || true
-              echo "Attempt $i failed, retrying in $((i*5))s..." >&2
-              sleep $((i*5))
-            done
-            command -v ffmpeg &>/dev/null || { echo "::error::ffmpeg install failed after retries"; exit 1; }
-          fi
           ffmpeg -version | head -1
           ffprobe -version | head -1
       - name: Install ffmpeg (Windows)
@@ -164,12 +174,15 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then
             ONEFILE="--onefile"
           fi
-          # Prepare ffmpeg data-file args if bundled binaries exist
+          # Prepare ffmpeg data-file args if bundled binaries exist (platform-specific)
           FFMPEG_ARGS=""
-          if [ -f ffmpeg-bin/ffmpeg ]; then FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffmpeg=ffmpeg"; fi
-          if [ -f ffmpeg-bin/ffmpeg.exe ]; then FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffmpeg.exe=ffmpeg.exe"; fi
-          if [ -f ffmpeg-bin/ffprobe ]; then FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffprobe=ffprobe"; fi
-          if [ -f ffmpeg-bin/ffprobe.exe ]; then FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffprobe.exe=ffprobe.exe"; fi
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            [ -f ffmpeg-bin/ffmpeg.exe ] && FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffmpeg.exe=ffmpeg.exe"
+            [ -f ffmpeg-bin/ffprobe.exe ] && FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffprobe.exe=ffprobe.exe"
+          else
+            [ -f ffmpeg-bin/ffmpeg ] && FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffmpeg=ffmpeg"
+            [ -f ffmpeg-bin/ffprobe ] && FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffprobe=ffprobe"
+          fi
           python -m nuitka \
             --standalone $ONEFILE \
             --include-package=youtube_cloude \
@@ -191,10 +204,13 @@ jobs:
             NUITKA_FLAGS="--windows-console-mode=disable"
           fi
           FFMPEG_ARGS=""
-          if [ -f ffmpeg-bin/ffmpeg ]; then FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffmpeg=ffmpeg"; fi
-          if [ -f ffmpeg-bin/ffmpeg.exe ]; then FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffmpeg.exe=ffmpeg.exe"; fi
-          if [ -f ffmpeg-bin/ffprobe ]; then FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffprobe=ffprobe"; fi
-          if [ -f ffmpeg-bin/ffprobe.exe ]; then FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffprobe.exe=ffprobe.exe"; fi
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            [ -f ffmpeg-bin/ffmpeg.exe ] && FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffmpeg.exe=ffmpeg.exe"
+            [ -f ffmpeg-bin/ffprobe.exe ] && FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffprobe.exe=ffprobe.exe"
+          else
+            [ -f ffmpeg-bin/ffmpeg ] && FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffmpeg=ffmpeg"
+            [ -f ffmpeg-bin/ffprobe ] && FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffprobe=ffprobe"
+          fi
           python -m nuitka \
             --standalone $ONEFILE \
             --enable-plugin=pyside6 \
@@ -263,16 +279,22 @@ jobs:
             done
 
           elif [ "$RUNNER_OS" = "macOS" ]; then
-            # .dmg (Komi Store format)
+            # .dmg (Komi Store format) — use unique volname per app to avoid hdiutil Resource busy
             for APP in youtube-cloude youtube-cloude-gui; do
               DISTDIR="$(dirname "$(find nuitka-build -name "${APP}" -type f | head -1)")"
               [ -z "$DISTDIR" ] && continue
+              DMG="dist/${APP}-${TAG}-${ARTIFACT}.dmg"
+              rm -f "$DMG"
               rm -rf stage && mkdir -p stage
               cp -a "$DISTDIR/." stage/
               ln -sf /Applications "stage/Applications"
-              hdiutil create -volname "YouTube-Cloude" -srcfolder stage -ov \
-                -format UDZO "dist/${APP}-${TAG}-${ARTIFACT}.dmg"
+              # detach any stale mount with same name
+              hdiutil detach "/Volumes/YouTube-Cloude ${APP}" 2>/dev/null || true
+              hdiutil create -volname "YouTube-Cloude ${APP}" -srcfolder stage -ov \
+                -format UDZO "$DMG" || sleep 2 && hdiutil create -volname "YouTube-Cloude ${APP}" -srcfolder stage -ov \
+                -format UDZO "$DMG"
               rm -rf stage
+              hdiutil detach "/Volumes/YouTube-Cloude ${APP}" 2>/dev/null || true
             done
           fi
 
