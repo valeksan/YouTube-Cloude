@@ -128,6 +128,31 @@ jobs:
             brew install ffmpeg
           fi
 
+      - name: Bundle ffmpeg binaries
+        shell: bash
+        run: |
+          mkdir -p ffmpeg-bin
+          # Copy installed ffmpeg/ffprobe into ffmpeg-bin for bundling
+          if command -v ffmpeg &>/dev/null; then
+            cp "$(command -v ffmpeg)" ffmpeg-bin/ffmpeg 2>/dev/null || cp "$(which ffmpeg)" ffmpeg-bin/ffmpeg 2>/dev/null || true
+            # Windows: ffmpeg is ffmpeg.exe
+            if [ -f "ffmpeg-bin/ffmpeg" ] && [ "$RUNNER_OS" = "Windows" ]; then
+              mv ffmpeg-bin/ffmpeg ffmpeg-bin/ffmpeg.exe 2>/dev/null || true
+            fi
+          fi
+          if command -v ffprobe &>/dev/null; then
+            cp "$(command -v ffprobe)" ffmpeg-bin/ffprobe 2>/dev/null || cp "$(which ffprobe)" ffmpeg-bin/ffprobe 2>/dev/null || true
+            if [ -f "ffmpeg-bin/ffprobe" ] && [ "$RUNNER_OS" = "Windows" ]; then
+              mv ffmpeg-bin/ffprobe ffmpeg-bin/ffprobe.exe 2>/dev/null || true
+            fi
+          fi
+          # Fallback: search common Windows chocolatey path
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            [ -f ffmpeg-bin/ffmpeg.exe ] || cp "C:/ProgramData/chocolatey/bin/ffmpeg.exe" ffmpeg-bin/ffmpeg.exe 2>/dev/null || true
+            [ -f ffmpeg-bin/ffprobe.exe ] || cp "C:/ProgramData/chocolatey/bin/ffprobe.exe" ffmpeg-bin/ffprobe.exe 2>/dev/null || true
+          fi
+          echo "=== ffmpeg-bin ==="; ls -lh ffmpeg-bin/ 2>/dev/null || echo "no ffmpeg-bin"; echo "=== ffmpeg version ==="; ffmpeg -version 2>/dev/null | head -1 || ./ffmpeg-bin/ffmpeg -version 2>/dev/null | head -1 || true
+
       # ── CLI: Nuitka (compiled) ──
       - name: Build CLI (Nuitka)
         shell: bash
@@ -139,10 +164,17 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then
             ONEFILE="--onefile"
           fi
+          # Prepare ffmpeg data-file args if bundled binaries exist
+          FFMPEG_ARGS=""
+          if [ -f ffmpeg-bin/ffmpeg ]; then FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffmpeg=ffmpeg"; fi
+          if [ -f ffmpeg-bin/ffmpeg.exe ]; then FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffmpeg.exe=ffmpeg.exe"; fi
+          if [ -f ffmpeg-bin/ffprobe ]; then FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffprobe=ffprobe"; fi
+          if [ -f ffmpeg-bin/ffprobe.exe ]; then FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffprobe.exe=ffprobe.exe"; fi
           python -m nuitka \
             --standalone $ONEFILE \
             --include-package=youtube_cloude \
             --include-package=reedsolo \
+            $FFMPEG_ARGS \
             --output-filename=youtube-cloude \
             --output-dir=nuitka-build \
             --assume-yes-for-downloads \
@@ -158,12 +190,18 @@ jobs:
             ONEFILE="--onefile"
             NUITKA_FLAGS="--windows-console-mode=disable"
           fi
+          FFMPEG_ARGS=""
+          if [ -f ffmpeg-bin/ffmpeg ]; then FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffmpeg=ffmpeg"; fi
+          if [ -f ffmpeg-bin/ffmpeg.exe ]; then FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffmpeg.exe=ffmpeg.exe"; fi
+          if [ -f ffmpeg-bin/ffprobe ]; then FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffprobe=ffprobe"; fi
+          if [ -f ffmpeg-bin/ffprobe.exe ]; then FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffprobe.exe=ffprobe.exe"; fi
           python -m nuitka \
             --standalone $ONEFILE \
             --enable-plugin=pyside6 \
             --include-package=youtube_cloude \
             --include-package=reedsolo \
             --include-package-data=PySide6 \
+            $FFMPEG_ARGS \
             --output-filename=youtube-cloude-gui \
             --output-dir=nuitka-build \
             --assume-yes-for-downloads \

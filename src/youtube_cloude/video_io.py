@@ -25,8 +25,33 @@ def _win_hide_kwargs() -> dict:
     return {}
 
 
+def _bundled_bin(name: str) -> Optional[str]:
+    """Check for ffmpeg/ffprobe bundled next to the executable (Nuitka)."""
+    # 1) next to the running executable (Nuitka standalone / onefile)
+    exe_dir = Path(sys.executable).parent
+    for cand in [exe_dir / name, exe_dir / f"{name}.exe"]:
+        if cand.exists():
+            return str(cand)
+    # 2) next to this file (dev / package install)
+    pkg_dir = Path(__file__).parent
+    for cand in [pkg_dir / name, pkg_dir / f"{name}.exe", pkg_dir.parent.parent / "ffmpeg-bin" / name,
+                 pkg_dir.parent.parent / "ffmpeg-bin" / f"{name}.exe"]:
+        if cand.exists():
+            return str(cand)
+    # 3) relative to executable's dist folder (Linux .dist)
+    for parent in [exe_dir, exe_dir.parent]:
+        for cand in [parent / name, parent / f"{name}.exe",
+                     parent / "ffmpeg-bin" / name, parent / "ffmpeg-bin" / f"{name}.exe"]:
+            if cand.exists():
+                return str(cand)
+    return None
+
+
 def _find_ffmpeg() -> str:
-    """Return path to ffmpeg binary or raise FileNotFoundError."""
+    """Return path to ffmpeg binary (bundled first, then PATH) or raise."""
+    bundled = _bundled_bin('ffmpeg')
+    if bundled:
+        return bundled
     path = shutil.which('ffmpeg')
     if path:
         return path
@@ -34,11 +59,15 @@ def _find_ffmpeg() -> str:
         "ffmpeg not found. Install it: "
         "apt install ffmpeg / brew install ffmpeg / "
         "https://ffmpeg.org/download.html"
+        " or place ffmpeg next to the executable."
     )
 
 
 def _find_ffprobe() -> str:
-    """Return path to ffprobe binary or raise FileNotFoundError."""
+    """Return path to ffprobe binary (bundled first, then PATH) or raise."""
+    bundled = _bundled_bin('ffprobe')
+    if bundled:
+        return bundled
     path = shutil.which('ffprobe')
     if path:
         return path
