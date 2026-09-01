@@ -27,49 +27,20 @@ Each 4-bit chunk of your file is mapped to one of 16 colours and drawn as a bloc
 
 ## ⚠️ Risks and Disclaimer
 
-### Educational and Research Purpose
+<details>
+<summary>Educational / ToS / Legal — click to expand</summary>
 
-This project is an **educational and research tool** designed to demonstrate steganographic techniques and highlight the resilience of lossy video compression against data embedding. It is **not intended for production use or any activity that may violate applicable laws or terms of service.**
+This project is an **educational and research tool** for steganography vs lossy video compression. Not for production or ToS-violating use.
 
-### How This Differs from an Attack
+**Not an attack:** does not damage infra, disrupt users, bypass auth, or distribute malware — concern is *misuse of service* (YouTube is for video, not covert storage).
 
-This project does **not** cause direct harm to YouTube or its users:
+**YouTube ToS:** [Terms](https://www.youtube.com/t/terms) §5.1/§5.5 — non-intended use may lead to removal/suspension. Automated systems may detect such content.
 
-- It does **not** damage platform infrastructure, servers, or data
-- It does **not** disrupt the service for other users
-- It does **not** bypass security controls, access controls, or authentication
-- It does **not** distribute malware, spam, or harmful content
+**Legal:** unauthorised concealment may fall under CMA 1990 (UK) / 18 U.S.C. §1030 (US); ToS breach may cause civil liability.
 
-The concern is **misuse of service** — YouTube is designed for sharing video content with viewers, not for covert data storage. Using it as a "cloud drive" via steganography falls outside the platform's intended purpose.
+**No warranty:** provided “as is”; use only lawfully and at your own risk. By using it you accept this.
 
-### YouTube Terms of Service
-
-Uploading steganographic content to YouTube may be considered a misuse of the platform under [YouTube's Terms of Service](https://www.youtube.com/t/terms):
-
-- **Section 5, paragraph 1:** YouTube is a platform for sharing video content with an audience, not for data storage or covert communication.
-- **Section 5, paragraph 5:** Using the service in a manner not intended by its design may result in content removal or account restrictions.
-
-YouTube's automated processing systems may detect and remove content that doesn't align with the platform's purpose. Accounts uploading such content may face restrictions, suspension, or termination.
-
-### Legal Considerations
-
-- **Unauthorised data concealment** may be interpreted as misuse of computer services in certain jurisdictions (e.g., [Computer Misuse Act 1990](https://www.legislation.gov.uk/ukpga/1990/18/contents) in the UK, [18 U.S.C. § 1030](https://www.law.cornell.edu/uscode/text/18/1030) in the US).
-- **Breach of platform ToS** may result in civil liability or account termination.
-- **Data uploaded to third-party platforms** may be subject to the platform's data retention, monitoring, and disclosure policies.
-
-### Responsible Disclosure
-
-This project was created to **highlight the resilience of steganographic methods against lossy video compression** — a known property of video codecs that has implications for content processing pipelines. The author advocates for:
-
-- **Responsible disclosure** of potential misuse vectors to affected platforms
-- **Educational use** to help security researchers understand steganographic techniques
-- **Improving platform defences** through awareness of these methods
-
-### No Warranty
-
-This software is provided **"as is"** without warranty of any kind. The authors and contributors are not responsible for any misuse of this software. Users are solely responsible for ensuring that their use complies with all applicable laws, regulations, and platform terms of service.
-
-**By using this software, you acknowledge that you have read this disclaimer and agree to use the software only for lawful, educational, and research purposes.**
+</details>
 
 ## Features
 
@@ -234,12 +205,8 @@ make test-fast      # stop on first failure
 
 ### Key Findings
 
-- **YTV2 is 2.5× faster to encode** than YTV1 (18s vs 46s, fewer frames: 52 vs 79)
-- **YTV2 produces 2.5× smaller video** (17.9 MB vs 45.8 MB) — highest density
-- **YTV3** trades density for resilience: 21 MB (39×) vs YTV2 17.9 MB (33×) but **yuv420p-safe without interlace** + RS(255,223) corrects 16 byte errors/chunk
-- **AES-GCM + PBKDF2 adds <1s overhead** — negligible vs AES-CBC SHA256
-- **Interlace produces 15× larger files** (yuv444p CRF 0) — YTV3 avoids this entirely
-- **Compress** (`--compress` zlib) on this incompressible PNG shows no gain (as expected); on text/logs yields 100–200× reduction (see §Compression)
+- **YTV2 is 2.5× faster/smaller than YTV1** (18s/17.9 MB vs 46s/45.8 MB)
+- **YTV3** is `yuv420p`-safe without interlace + RS(255,223) for 16-byte correction — avoids 15× interlace bloat
 
 ## How Interlace[^il] Works
 
@@ -313,29 +280,10 @@ Interlace requires **lossless encoding** (CRF 0) to preserve the exact block col
 
 ```
 YouTube-Cloude/
-├── src/youtube_cloude/
-│   ├── __init__.py      # Package version (1.1.0)
-│   ├── __main__.py      # CLI entry point (python -m youtube_cloude)
-│   ├── cli.py           # PyInstaller CLI entry (absolute imports)
-│   ├── core.py          # Constants, CRC32, interlacing, RS, encryption (PBKDF2+GCM)
-│   ├── encoder.py       # YouTubeEncoder class (YTV3, compress)
-│   ├── decoder.py       # YouTubeDecoder class (auto-detect YTV3, RS, GCM)
-│   ├── utils.py         # CLI helpers, argparse (--compress)
-│   ├── gui_service.py   # Shared service layer (unified GUI logic)
-│   ├── gui.py           # Tkinter GUI (deprecated, use Qt)
-│   ├── gui_cli.py       # Tkinter entry for PyInstaller
-│   ├── gui_qt.py        # PySide6 GUI (responsive, dark theme, primary)
-│   ├── gui_qt_cli.py    # PySide6 entry for PyInstaller
-│   ├── compress.py      # 7z compress/decompress (legacy)
-│   └── uploader.py      # YouTube upload (OAuth2) / download (yt-dlp)
-├── tests/
-│   └── test_encoder.py  # 36 tests (unit + YouTube re-encoding simulation)
-├── .github/workflows/
-│   ├── test.yml         # CI: test on push/PR
-│   └── release.yml      # CI: build all platforms on tag push
-├── pyproject.toml       # PEP 621 metadata, deps, entry points
-├── Makefile             # venv, install, run, build, test, clean
-└── README.md
+├── src/youtube_cloude/  # encoder, decoder, core (RS/GCM), GUI (Qt/Kivy)
+├── tests/               # 36 tests
+├── .github/workflows/   # test.yml / release.yml
+├── pyproject.toml / Makefile / README.md
 ```
 
 ## Encryption
@@ -378,24 +326,19 @@ This project builds on the work of:
 | [**@Maksim4081862**](https://github.com/Maksim4081862) | GUI concepts, tkinter implementation |
 | [**@Verdgil**](https://github.com/Verdgil) | AES-256-CBC encryption (PR [#10](https://github.com/KorocheVolgin/YouTube-Cloude/pull/10)) |
 
-## Related Projects
+<details>
+<summary>Related Projects</summary>
 
-- [YouTube-Cloude (original)](https://github.com/KorocheVolgin/YouTube-Cloude) — @KorocheVolgin's original
-- [YouTube-Cloude-Fork](https://github.com/Hinderchik/YouTube-Cloude-Fork) — @Hinderchik's security fork
-- [YouTube-Cloude](https://github.com/IvanSCP/YouTube-Cloude) — @IvanSCP's CLI improvements
-- [YouTube-Cloud-GUI](https://github.com/Maksim4081862/YouTube-Cloud-GUI) — @Maksim4081862's GUI
+- [YouTube-Cloude (original)](https://github.com/KorocheVolgin/YouTube-Cloude)
+- [YouTube-Cloude-Fork](https://github.com/Hinderchik/YouTube-Cloude-Fork)
+- [YouTube-Cloude](https://github.com/IvanSCP/YouTube-Cloude)
+- [YouTube-Cloud-GUI](https://github.com/Maksim4081862/YouTube-Cloud-GUI)
+
+</details>
 
 ## Contributing
 
-Contributions are welcome! Please open an issue or submit a pull request.
-
-1. Fork the repository
-2. Create a feature branch (`git checkout -b feature/my-feature`)
-3. Set up dev environment: `make setup-dev`
-4. Make your changes
-5. Test: `make test`
-6. Commit and push
-7. Open a Pull Request
+PRs welcome — fork, branch, `make setup-dev` + `make test`, push.
 
 ## License
 
@@ -413,6 +356,6 @@ Until then, please respect the author's rights and use this code for personal/ed
 
 <div align="center">
 
-**Keywords:** file hiding, steganography, YouTube storage, encode file to video, hide data in video, covert channel, video steganography, colour block encoding, file-in-video, YouTube cloud storage
+**Keywords:** youtube steganography, file-to-video, covert channel, Reed-Solomon, AES-GCM PBKDF2, ytv3, yuv420p, ffmpeg, Nuitka, Kivy Android
 
 </div>
