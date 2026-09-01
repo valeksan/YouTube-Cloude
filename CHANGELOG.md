@@ -7,16 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.1] - 2026-09-01
+
 ### Added
 - Bundled static `ffmpeg`/`ffprobe` into Nuitka builds (`--include-data-files`) — no external `ffmpeg` install required; still falls back to system `ffmpeg` via `python -m` ([#249fa09](https://github.com/valeksan/YouTube-Cloude/commit/249fa09))
 - Hide `ffmpeg`/`ffprobe` console window on Windows (`CREATE_NO_WINDOW`) during encode/decode ([#1878a33](https://github.com/valeksan/YouTube-Cloude/commit/1878a33))
 - Custom `ffmpeg` selection: CLI `--ffmpeg`/`--ffprobe`, env `YOUTUBE_CLOUDE_FFMPEG`/`YOUTUBE_CLOUDE_FFPROBE`/`FFMPEG_PATH`, GUI `Settings → FFmpeg` (QSettings persistence) ([#7daaa74](https://github.com/valeksan/YouTube-Cloude/commit/7daaa74), [#b9b1815](https://github.com/valeksan/YouTube-Cloude/commit/b9b1815), [#f1203e1](https://github.com/valeksan/YouTube-Cloude/commit/f1203e1))
 - FFmpeg priority: `--ffmpeg`/env → next-to-exe → `PATH` → bundled ([#9216b39](https://github.com/valeksan/YouTube-Cloude/commit/9216b39))
 - GUI auto-fill: output video defaults to `<input_stem>.mp4` on file pick (Qt/Kivy/Tkinter) ([#7a860c4](https://github.com/valeksan/YouTube-Cloude/commit/7a860c4))
+- GUI Stop button: encode/decode can be cancelled via the same button (`Encode` ↔ `Stop` / `Decode` ↔ `Stop`) with progress reset and `Cancelled` log — core `YouTubeEncoder`/`YouTubeDecoder` cooperative `_cancelled` flag ([#bd534e6](https://github.com/valeksan/YouTube-Cloude/commit/bd534e6))
 - Benchmark: 12 variants including YTV3/compress on new hardware (Ryzen 3 PRO 4350G) ([#53c19b0](https://github.com/valeksan/YouTube-Cloude/commit/53c19b0))
 
+### Changed
+- `README` `YouTube upload/download` marked as `(planned)` — `uploader.py` exists but not yet integrated into CLI/GUI ([#8774d1a](https://github.com/valeksan/YouTube-Cloude/commit/8774d1a))
+
 ### Removed
-- Legacy `AES-256-CBC` backward compatibility removed per user request — only `AES-256-GCM` is now supported and documented ([#0cff426](https://github.com/valeksan/YouTube-Cloude/commit/0cff426), [#5b38369](https://github.com/valeksan/YouTube-Cloude/commit/5b38369))
+- Legacy `AES-256-CBC` backward compatibility removed per user request — only `AES-256-GCM` is now supported ([#0cff426](https://github.com/valeksan/YouTube-Cloude/commit/0cff426), [#5b38369](https://github.com/valeksan/YouTube-Cloude/commit/5b38369))
 
 ## [1.1.0] - 2026-08-31
 
@@ -51,7 +57,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - Initial public release with Nuitka-compiled desktop CLI/GUI (Windows `.exe`, Linux binary, macOS arm64), Kivy Android APK (Buildozer, API 33, arm64), YTV1/YTV2 formats, AES-CBC (SHA256) encryption, CRC32, interlacing, zlib/7z helpers, yt-dlp/Google API uploader, PySide6 Qt GUI + Tkinter legacy + Kivy Android, `test.yml`/`release.yml` CI, `src`-layout and `pyproject.toml`.
 
-[Unreleased]: https://github.com/valeksan/YouTube-Cloude/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/valeksan/YouTube-Cloude/compare/v1.1.1...HEAD
+[1.1.1]: https://github.com/valeksan/YouTube-Cloude/compare/v1.1.0...v1.1.1
 [1.1.0]: https://github.com/valeksan/YouTube-Cloude/releases/tag/v1.1.0
 [1.0.2]: https://github.com/valeksan/YouTube-Cloude/releases/tag/v1.0.2
 [1.0.0]: https://github.com/valeksan/YouTube-Cloude/releases/tag/v1.0.0

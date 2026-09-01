@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "youtube-cloude"
-version = "1.1.0"
+version = "1.1.1"
 description = "Steganographic file storage in YouTube videos — encode files into colour-block video frames"
 readme = "README.md"
 license = {text = "Proprietary — see README.md"}
