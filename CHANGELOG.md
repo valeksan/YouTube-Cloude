@@ -13,13 +13,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Custom `ffmpeg` selection: CLI `--ffmpeg`/`--ffprobe`, env `YOUTUBE_CLOUDE_FFMPEG`/`YOUTUBE_CLOUDE_FFPROBE`/`FFMPEG_PATH`, GUI `Settings → FFmpeg` (QSettings persistence) ([#7daaa74](https://github.com/valeksan/YouTube-Cloude/commit/7daaa74), [#b9b1815](https://github.com/valeksan/YouTube-Cloude/commit/b9b1815), [#f1203e1](https://github.com/valeksan/YouTube-Cloude/commit/f1203e1))
 - FFmpeg priority: `--ffmpeg`/env → next-to-exe → `PATH` → bundled ([#9216b39](https://github.com/valeksan/YouTube-Cloude/commit/9216b39))
 - GUI auto-fill: output video defaults to `<input_stem>.mp4` on file pick (Qt/Kivy/Tkinter) ([#7a860c4](https://github.com/valeksan/YouTube-Cloude/commit/7a860c4))
-- Documentation: `Windows SmartScreen` section for unsigned `.exe` ([#f243ecb](https://github.com/valeksan/YouTube-Cloude/commit/f243ecb))
-- Documentation: RS and Interlacing footnotes (`[^rs]`, `[^il]`) at the confusing words themselves ([#3adefaf](https://github.com/valeksan/YouTube-Cloude/commit/3adefaf), [#cd69e0e](https://github.com/valeksan/YouTube-Cloude/commit/cd69e0e), [#bdd690a](https://github.com/valeksan/YouTube-Cloude/commit/bdd690a))
-- Documentation: note that output `.mp4` can be renamed — original filename restored from header ([#744063d](https://github.com/valeksan/YouTube-Cloude/commit/744063d))
-
-### Changed
-- Encryption docs clarified: `Supported: AES-256-GCM with PBKDF2-HMAC-SHA256 (200 000 iterations)` ([#481d985](https://github.com/valeksan/YouTube-Cloude/commit/481d985))
-- Benchmark refreshed for new hardware (Ryzen 3 PRO 4350G, 12 variants including YTV3/compress) ([#53c19b0](https://github.com/valeksan/YouTube-Cloude/commit/53c19b0))
+- Benchmark: 12 variants including YTV3/compress on new hardware (Ryzen 3 PRO 4350G) ([#53c19b0](https://github.com/valeksan/YouTube-Cloude/commit/53c19b0))
 
 ### Removed
 - Legacy `AES-256-CBC` backward compatibility removed per user request — only `AES-256-GCM` is now supported and documented ([#0cff426](https://github.com/valeksan/YouTube-Cloude/commit/0cff426), [#5b38369](https://github.com/valeksan/YouTube-Cloude/commit/5b38369))
@@ -37,7 +31,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - CLI `--format` now accepts `ytv1|ytv2|ytv3` (default `ytv1`), GUI defaults to YTV3
 - `core.py` `compute_grid` now uses single region for YTV3 (`blocks_per_frame = bpr`), `MAX_FILE_SIZES` 500 MB for YTV3
 - `video_io.py` YTV3 uses `yuv420p` `CRF 18` `medium` (was `yuv444p` `CRF 0` for interlace)
-- README refreshed: 1.1.0 version, YTV3 in Features/Format Comparison/Project Structure, Benchmark, Encryption (GCM) and Compression sections, palette/ECC docs ([#3b1c14d](https://github.com/valeksan/YouTube-Cloude/commit/3b1c14d))
+- Version bump `1.0.0` → `1.1.0`
 
 ### Fixed
 - Windows GUI console window on launch (`--windows-console-mode=disable` for Nuitka GUI) ([#03a5937](https://github.com/valeksan/YouTube-Cloude/commit/03a5937))
