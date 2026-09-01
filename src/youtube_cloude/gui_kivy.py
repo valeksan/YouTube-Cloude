@@ -475,6 +475,18 @@ class YouTubeCloudeApp(App):
 
     # ── Encode ────────────────────────────────────────────────────────
     def start_encode(self) -> None:
+        # Toggle: if already running -> cancel
+        if getattr(self, '_enc_thread', None) is not None and self._enc_thread.is_alive():
+            enc = getattr(self, '_enc_encoder', None)
+            if enc is not None:
+                try:
+                    enc.cancel()
+                except Exception:
+                    pass
+            self.root.ids.encode_btn.text = '⏳ Cancelling...'
+            self.root.ids.enc_log.text += '\nCancelling...'
+            return
+
         input_file = self.root.ids.enc_input.text.strip()
         output_file = self.root.ids.enc_output.text.strip() or 'output.mp4'
 
@@ -483,31 +495,43 @@ class YouTubeCloudeApp(App):
             return
 
         settings = self._get_settings()
-        self.root.ids.encode_btn.disabled = True
-        self.root.ids.encode_btn.text = '⏳ Encoding...'
+        self.root.ids.encode_btn.text = '⏹  Stop'
+        self.root.ids.encode_btn.disabled = False
         self.root.ids.enc_log.text = ''
         self.root.ids.enc_progress.value = 0
 
         def _worker():
             try:
-                from youtube_cloude.gui_service import EncodeSettings, encode_file
-                enc_settings = EncodeSettings(
-                    format=settings['format'],
+                from youtube_cloude.encoder import YouTubeEncoder
+
+                self._enc_encoder = YouTubeEncoder(
+                    settings['key'],
+                    format_name=settings['format'],
                     interlace=settings['interlace'],
                     compress=settings['compress'],
-                    key=settings['key'],
                 )
 
                 def cb(done: int, total: int):
+                    if getattr(self._enc_encoder, '_cancelled', False):
+                        return
                     pct = int(done / total * 100) if total else 0
                     Clock.schedule_once(lambda dt: self._update_enc_progress(pct))
 
-                ok = encode_file(input_file, output_file, enc_settings, progress_callback=cb)
-                Clock.schedule_once(lambda dt: self._encode_done(ok, output_file))
+                ok = self._enc_encoder.encode(input_file, output_file, progress_callback=cb)
+                if getattr(self._enc_encoder, '_cancelled', False):
+                    Clock.schedule_once(lambda dt: self._encode_cancelled())
+                else:
+                    Clock.schedule_once(lambda dt: self._encode_done(ok, output_file))
             except Exception as e:
-                Clock.schedule_once(lambda dt: self._encode_error(str(e)))
+                if getattr(self, '_enc_encoder', None) and getattr(self._enc_encoder, '_cancelled', False):
+                    Clock.schedule_once(lambda dt: self._encode_cancelled())
+                else:
+                    Clock.schedule_once(lambda dt: self._encode_error(str(e)))
+            finally:
+                self._enc_encoder = None
 
-        threading.Thread(target=_worker, daemon=True).start()
+        self._enc_thread = threading.Thread(target=_worker, daemon=True)
+        self._enc_thread.start()
 
     def _update_enc_progress(self, pct: int) -> None:
         self.root.ids.enc_progress.value = pct
@@ -516,10 +540,17 @@ class YouTubeCloudeApp(App):
     def _encode_done(self, ok: bool, path: str) -> None:
         self.root.ids.encode_btn.disabled = False
         self.root.ids.encode_btn.text = '▶  Encode'
+        self.root.ids.enc_progress.value = 0 if not ok else 100
         if ok:
             self.root.ids.enc_log.text += f'\n✅ Done! Saved to: {path}'
         else:
             self.root.ids.enc_log.text += '\n❌ Encoding failed.'
+
+    def _encode_cancelled(self) -> None:
+        self.root.ids.encode_btn.disabled = False
+        self.root.ids.encode_btn.text = '▶  Encode'
+        self.root.ids.enc_progress.value = 0
+        self.root.ids.enc_log.text += '\n⏹ Cancelled.'
 
     def _encode_error(self, msg: str) -> None:
         self.root.ids.encode_btn.disabled = False
@@ -528,6 +559,17 @@ class YouTubeCloudeApp(App):
 
     # ── Decode ────────────────────────────────────────────────────────
     def start_decode(self) -> None:
+        if getattr(self, '_dec_thread', None) is not None and self._dec_thread.is_alive():
+            dec = getattr(self, '_dec_decoder', None)
+            if dec is not None:
+                try:
+                    dec.cancel()
+                except Exception:
+                    pass
+            self.root.ids.decode_btn.text = '⏳ Cancelling...'
+            self.root.ids.dec_log.text += '\nCancelling...'
+            return
+
         video_file = self.root.ids.dec_input.text.strip()
         output_dir = self.root.ids.dec_output.text.strip() or '.'
 
@@ -536,29 +578,41 @@ class YouTubeCloudeApp(App):
             return
 
         settings = self._get_settings()
-        self.root.ids.decode_btn.disabled = True
-        self.root.ids.decode_btn.text = '⏳ Decoding...'
+        self.root.ids.decode_btn.text = '⏹  Stop'
+        self.root.ids.decode_btn.disabled = False
         self.root.ids.dec_log.text = ''
         self.root.ids.dec_progress.value = 0
 
         def _worker():
             try:
-                from youtube_cloude.gui_service import DecodeSettings, decode_file
-                dec_settings = DecodeSettings(
-                    key=settings['key'],
+                from youtube_cloude.decoder import YouTubeDecoder
+
+                self._dec_decoder = YouTubeDecoder(
+                    settings['key'],
                     interlace=settings['interlace'],
                 )
 
                 def cb(done: int, total: int):
+                    if getattr(self._dec_decoder, '_cancelled', False):
+                        return
                     pct = int(done / total * 100) if total else 0
                     Clock.schedule_once(lambda dt: self._update_dec_progress(pct))
 
-                ok = decode_file(video_file, output_dir, dec_settings, progress_callback=cb)
-                Clock.schedule_once(lambda dt: self._decode_done(ok))
+                ok = self._dec_decoder.decode(video_file, output_dir, progress_callback=cb)
+                if getattr(self._dec_decoder, '_cancelled', False):
+                    Clock.schedule_once(lambda dt: self._decode_cancelled())
+                else:
+                    Clock.schedule_once(lambda dt: self._decode_done(ok))
             except Exception as e:
-                Clock.schedule_once(lambda dt: self._decode_error(str(e)))
+                if getattr(self, '_dec_decoder', None) and getattr(self._dec_decoder, '_cancelled', False):
+                    Clock.schedule_once(lambda dt: self._decode_cancelled())
+                else:
+                    Clock.schedule_once(lambda dt: self._decode_error(str(e)))
+            finally:
+                self._dec_decoder = None
 
-        threading.Thread(target=_worker, daemon=True).start()
+        self._dec_thread = threading.Thread(target=_worker, daemon=True)
+        self._dec_thread.start()
 
     def _update_dec_progress(self, pct: int) -> None:
         self.root.ids.dec_progress.value = pct
@@ -571,6 +625,12 @@ class YouTubeCloudeApp(App):
             self.root.ids.dec_log.text += '\n✅ Decode complete!'
         else:
             self.root.ids.dec_log.text += '\n⚠ Decode finished with issues.'
+
+    def _decode_cancelled(self) -> None:
+        self.root.ids.decode_btn.disabled = False
+        self.root.ids.decode_btn.text = '▶  Decode'
+        self.root.ids.dec_progress.value = 0
+        self.root.ids.dec_log.text += '\n⏹ Cancelled.'
 
     def _decode_error(self, msg: str) -> None:
         self.root.ids.decode_btn.disabled = False

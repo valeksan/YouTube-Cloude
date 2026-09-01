@@ -260,17 +260,29 @@ class EncodeWorker(QThread):
         self.fmt = fmt
         self.interlace = interlace
         self.compress = compress
+        self._cancelled = False
+        self.encoder = None
+
+    def cancel(self) -> None:
+        self._cancelled = True
+        if self.encoder is not None:
+            try:
+                self.encoder.cancel()
+            except Exception:
+                pass
 
     def run(self) -> None:
         try:
-            from youtube_cloude.gui_service import EncodeSettings, encode_file
+            from youtube_cloude.encoder import YouTubeEncoder
 
-            settings = EncodeSettings(
-                format=self.fmt, interlace=self.interlace,
-                compress=self.compress, key=self.key,
+            self.encoder = YouTubeEncoder(
+                self.key, format_name=self.fmt,
+                interlace=self.interlace, compress=self.compress,
             )
 
             def cb(done: int, total: int) -> None:
+                if self._cancelled or self.isInterruptionRequested():
+                    return
                 pct = int(done / total * 100) if total else 0
                 self.progress.emit(pct)
                 self.log.emit(f"  Frame progress: {pct}%")
@@ -278,14 +290,20 @@ class EncodeWorker(QThread):
             self.log.emit(f"Starting encode ({self.fmt.upper()}, "
                           f"interlace={'ON' if self.interlace else 'OFF'}, "
                           f"compress={'ON' if self.compress else 'OFF'})...")
-            ok = encode_file(self.input_file, self.output_file,
-                             settings, progress_callback=cb)
-            if ok:
+            ok = self.encoder.encode(self.input_file, self.output_file,
+                                     progress_callback=cb)
+            if self._cancelled:
+                self.log.emit("Cancelled by user")
+                self.finished.emit(False, "")
+            elif ok:
                 self.finished.emit(True, self.output_file)
             else:
                 self.finished.emit(False, "")
         except Exception as e:
-            self.error.emit(str(e))
+            if self._cancelled:
+                self.finished.emit(False, "")
+            else:
+                self.error.emit(str(e))
 
 
 class DecodeWorker(QThread):
@@ -303,24 +321,43 @@ class DecodeWorker(QThread):
         self.output_dir = output_dir
         self.key = key
         self.interlace = interlace
+        self._cancelled = False
+        self.decoder = None
+
+    def cancel(self) -> None:
+        self._cancelled = True
+        if self.decoder is not None:
+            try:
+                self.decoder.cancel()
+            except Exception:
+                pass
 
     def run(self) -> None:
         try:
-            from youtube_cloude.gui_service import DecodeSettings, decode_file
+            from youtube_cloude.decoder import YouTubeDecoder
 
-            settings = DecodeSettings(key=self.key, interlace=self.interlace)
+            self.decoder = YouTubeDecoder(self.key, interlace=self.interlace)
 
             def cb(done: int, total: int) -> None:
+                if self._cancelled or self.isInterruptionRequested():
+                    return
                 pct = int(done / total * 100) if total else 0
                 self.progress.emit(pct)
                 self.log.emit(f"  Block progress: {pct}%")
 
             self.log.emit("Starting decode...")
-            ok = decode_file(self.video_file, self.output_dir,
-                             settings, progress_callback=cb)
-            self.finished.emit(ok)
+            ok = self.decoder.decode(self.video_file, self.output_dir,
+                                     progress_callback=cb)
+            if self._cancelled:
+                self.log.emit("Cancelled by user")
+                self.finished.emit(False)
+            else:
+                self.finished.emit(ok)
         except Exception as e:
-            self.error.emit(str(e))
+            if self._cancelled:
+                self.finished.emit(False)
+            else:
+                self.error.emit(str(e))
 
 
 # ── Responsive detection ────────────────────────────────────────────────
@@ -444,6 +481,15 @@ class EncodePage(QWidget):
         return {'format': 'ytv1', 'interlace': False, 'compress': False, 'key': None}
 
     def _start_encode(self) -> None:
+        # Toggle: if already running -> cancel
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.cancel()
+            self._worker.requestInterruption()
+            self.encode_btn.setText("⏳  Cancelling...")
+            self.encode_btn.setEnabled(False)
+            self.log_area.append("Cancelling...")
+            return
+
         input_file = self.input_edit.text().strip()
         output_file = self.output_edit.text().strip() or 'output.mp4'
 
@@ -454,8 +500,8 @@ class EncodePage(QWidget):
 
         settings = self.get_settings()
 
-        self.encode_btn.setEnabled(False)
-        self.encode_btn.setText("⏳  Encoding...")
+        self.encode_btn.setText("⏹  Stop")
+        self.encode_btn.setEnabled(True)
         self.log_area.clear()
         self.progress.setValue(0)
 
@@ -481,20 +527,29 @@ class EncodePage(QWidget):
     def _on_finished(self, ok: bool, path: str) -> None:
         self.encode_btn.setEnabled(True)
         self.encode_btn.setText("▶  Encode")
+        is_cancel = self._worker is not None and getattr(self._worker, '_cancelled', False)
         if ok:
             self.log_area.append(f"\n✅ Done! Video saved to: {path}")
             QMessageBox.information(
                 self, "Encode complete",
                 f"Video saved to:\n{path}",
             )
+        elif is_cancel:
+            self.log_area.append("\n⏹ Cancelled.")
+            self.progress.setValue(0)
         else:
             self.log_area.append("\n❌ Encoding failed.")
             QMessageBox.warning(self, "Failed", "Encoding failed. See log.")
 
     @Slot(str)
     def _on_error(self, msg: str) -> None:
+        is_cancel = self._worker is not None and getattr(self._worker, '_cancelled', False)
         self.encode_btn.setEnabled(True)
         self.encode_btn.setText("▶  Encode")
+        if is_cancel:
+            self.log_area.append("\n⏹ Cancelled.")
+            self.progress.setValue(0)
+            return
         self.log_area.append(f"\n❌ Error: {msg}")
         QMessageBox.critical(self, "Error", msg)
 
@@ -577,6 +632,14 @@ class DecodePage(QWidget):
             self.dir_edit.setText(path)
 
     def _start_decode(self) -> None:
+        if self._worker is not None and self._worker.isRunning():
+            self._worker.cancel()
+            self._worker.requestInterruption()
+            self.decode_btn.setText("⏳  Cancelling...")
+            self.decode_btn.setEnabled(False)
+            self.log_area.append("Cancelling...")
+            return
+
         video_file = self.video_edit.text().strip()
         output_dir = self.dir_edit.text().strip() or '.'
 
@@ -593,8 +656,8 @@ class DecodePage(QWidget):
             key = sp.key_edit.text().strip() or None
             interlace = sp.interlace_check.isChecked()
 
-        self.decode_btn.setEnabled(False)
-        self.decode_btn.setText("⏳  Decoding...")
+        self.decode_btn.setText("⏹  Stop")
+        self.decode_btn.setEnabled(True)
         self.log_area.clear()
         self.progress.setValue(0)
 
@@ -617,9 +680,13 @@ class DecodePage(QWidget):
     def _on_finished(self, ok: bool) -> None:
         self.decode_btn.setEnabled(True)
         self.decode_btn.setText("▶  Decode")
+        is_cancel = self._worker is not None and getattr(self._worker, '_cancelled', False)
         if ok:
             self.log_area.append("\n✅ Decode complete!")
             QMessageBox.information(self, "Done", "File recovered successfully.")
+        elif is_cancel:
+            self.log_area.append("\n⏹ Cancelled.")
+            self.progress.setValue(0)
         else:
             self.log_area.append("\n⚠️ Decode finished with issues.")
             QMessageBox.warning(self, "Decode",
@@ -627,6 +694,13 @@ class DecodePage(QWidget):
 
     @Slot(str)
     def _on_error(self, msg: str) -> None:
+        is_cancel = self._worker is not None and getattr(self._worker, '_cancelled', False)
+        if is_cancel:
+            self.decode_btn.setEnabled(True)
+            self.decode_btn.setText("▶  Decode")
+            self.log_area.append("\n⏹ Cancelled.")
+            self.progress.setValue(0)
+            return
         self.decode_btn.setEnabled(True)
         self.decode_btn.setText("▶  Decode")
         self.log_area.append(f"\n❌ Error: {msg}")

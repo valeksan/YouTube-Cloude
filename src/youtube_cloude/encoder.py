@@ -86,6 +86,12 @@ class YouTubeEncoder:
         print(f"  Compress:   {'zlib' if self.compress else 'OFF'}")
         print(f"  Max file:   {self.max_file_size / 1024 / 1024:.0f} MB")
 
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        """Request cancellation of ongoing encode."""
+        self._cancelled = True
+
     # ── Drawing helpers (pure numpy) ───────────────────────────────────
     def draw_markers(self, frame: np.ndarray) -> np.ndarray:
         """Draw alignment markers in each corner (white fill, black border)."""
@@ -259,6 +265,9 @@ class YouTubeEncoder:
         try:
             guard_start = frames_needed - 5
             for frame_num in range(frames_needed):
+                if self._cancelled:
+                    print("\n  Cancelled by user")
+                    return False
                 if progress_callback:
                     progress_callback(frame_num + 1, frames_needed)
 
@@ -318,6 +327,9 @@ class YouTubeEncoder:
                     frame = interlace_frame(frame)
                 save_frame_png(frame, frame_file)
 
+            if self._cancelled:
+                print("\n  Cancelled before FFmpeg")
+                return False
             # Convert to MP4
             print("\n  Converting to MP4...")
             if self.is_ytv3:

@@ -67,6 +67,12 @@ class YouTubeDecoder:
             print(f"  Grid:   {self.blocks_x} x {self.blocks_y} blocks")
         print(f"  Key:    {'YES' if self._passphrase else 'NO'}")
 
+        self._cancelled = False
+
+    def cancel(self) -> None:
+        """Request cancellation of ongoing decode."""
+        self._cancelled = True
+
     def _configure_format(self, fmt: dict) -> None:
         """Set grid parameters from a format dict."""
         g = compute_grid(fmt)
@@ -292,6 +298,9 @@ class YouTubeDecoder:
         frames_processed = 0
 
         for frame_num, frame in read_frames(video_file):
+            if self._cancelled:
+                print("\n  Cancelled by user")
+                return False
             if progress_callback:
                 progress_callback(frame_num + 1, total_frames)
 

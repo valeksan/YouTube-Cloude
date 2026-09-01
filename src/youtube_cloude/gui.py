@@ -52,6 +52,11 @@ class App(tk.Tk):
         self.minsize(600, 500)
         self.configure(bg=_BG)
 
+        self._enc_thread: Optional[threading.Thread] = None
+        self._enc_encoder: Optional[YouTubeEncoder] = None
+        self._dec_thread: Optional[threading.Thread] = None
+        self._dec_decoder: Optional[YouTubeDecoder] = None
+
         self._apply_theme()
         self._build_ui()
 
@@ -331,6 +336,17 @@ class App(tk.Tk):
 
     # ── Encode ──────────────────────────────────────────────────────────
     def _start_encode(self) -> None:
+        # Toggle: if already running -> cancel
+        if self._enc_thread is not None and self._enc_thread.is_alive():
+            if self._enc_encoder is not None:
+                try:
+                    self._enc_encoder.cancel()
+                except Exception:
+                    pass
+            self.enc_btn.configure(text="⏳  Cancelling...")
+            self._log(self.enc_log, "Cancelling...")
+            return
+
         input_file = self.enc_input_var.get().strip()
         output_file = self.enc_output_var.get().strip() or 'output.mp4'
         key = self.key_var.get().strip() or None
@@ -342,36 +358,46 @@ class App(tk.Tk):
             messagebox.showwarning("Input needed", "Please select a file to encode.")
             return
 
-        self.enc_btn.configure(state='disabled')
+        self.enc_btn.configure(text="⏹  Stop")
         self._clear_log(self.enc_log)
         self.enc_progress['value'] = 0
 
         def _worker() -> None:
             try:
-                settings = EncodeSettings(format=fmt, interlace=interlace, compress=compress, key=key)
+                self._enc_encoder = YouTubeEncoder(key, format_name=fmt, interlace=interlace, compress=compress)
 
                 def _cb(done: int, total: int) -> None:
                     pct = int(done / total * 100) if total else 0
                     self.after(0, self._update_enc_progress, pct)
 
-                ok = encode_file(input_file, output_file, settings, progress_callback=_cb)
-                self.after(
-                    0,
-                    self._encode_done,
-                    ok,
-                    output_file if ok else None,
-                )
+                ok = self._enc_encoder.encode(input_file, output_file, progress_callback=_cb)
+                # check if cancelled
+                if getattr(self._enc_encoder, '_cancelled', False):
+                    self.after(0, self._encode_cancelled)
+                else:
+                    self.after(
+                        0,
+                        self._encode_done,
+                        ok,
+                        output_file if ok else None,
+                    )
             except Exception as exc:
-                self.after(0, self._encode_error, str(exc))
+                if getattr(self._enc_encoder, '_cancelled', False):
+                    self.after(0, self._encode_cancelled)
+                else:
+                    self.after(0, self._encode_error, str(exc))
+            finally:
+                self._enc_encoder = None
 
-        threading.Thread(target=_worker, daemon=True).start()
+        self._enc_thread = threading.Thread(target=_worker, daemon=True)
+        self._enc_thread.start()
 
     def _update_enc_progress(self, pct: int) -> None:
         self.enc_progress['value'] = pct
         self._log(self.enc_log, f"  Progress: {pct}%")
 
     def _encode_done(self, ok: bool, path: Optional[str]) -> None:
-        self.enc_btn.configure(state='normal')
+        self.enc_btn.configure(state='normal', text="▶  Encode")
         if ok:
             self._log(self.enc_log, f"\nDone! Video saved to: {path}")
             messagebox.showinfo("Encode complete", f"Video saved to:\n{path}")
@@ -379,13 +405,28 @@ class App(tk.Tk):
             self._log(self.enc_log, "\nEncoding failed.")
             messagebox.showerror("Encode failed", "Encoding failed. See log.")
 
+    def _encode_cancelled(self) -> None:
+        self.enc_btn.configure(state='normal', text="▶  Encode")
+        self.enc_progress['value'] = 0
+        self._log(self.enc_log, "\n⏹ Cancelled.")
+
     def _encode_error(self, msg: str) -> None:
-        self.enc_btn.configure(state='normal')
+        self.enc_btn.configure(state='normal', text="▶  Encode")
         self._log(self.enc_log, f"\nError: {msg}")
         messagebox.showerror("Error", msg)
 
     # ── Decode ──────────────────────────────────────────────────────────
     def _start_decode(self) -> None:
+        if self._dec_thread is not None and self._dec_thread.is_alive():
+            if self._dec_decoder is not None:
+                try:
+                    self._dec_decoder.cancel()
+                except Exception:
+                    pass
+            self.dec_btn.configure(text="⏳  Cancelling...")
+            self._log(self.dec_log, "Cancelling...")
+            return
+
         video_file = self.dec_input_var.get().strip()
         output_dir = self.dec_output_var.get().strip() or '.'
         key = self.key_var.get().strip() or None
@@ -395,31 +436,40 @@ class App(tk.Tk):
             messagebox.showwarning("Input needed", "Please select a video to decode.")
             return
 
-        self.dec_btn.configure(state='disabled')
+        self.dec_btn.configure(text="⏹  Stop")
         self._clear_log(self.dec_log)
         self.dec_progress['value'] = 0
 
         def _worker() -> None:
             try:
-                settings = DecodeSettings(key=key, interlace=interlace)
+                self._dec_decoder = YouTubeDecoder(key, interlace=interlace)
 
                 def _cb(done: int, total: int) -> None:
                     pct = int(done / total * 100) if total else 0
                     self.after(0, self._update_dec_progress, pct)
 
-                ok = decode_file(video_file, output_dir, settings, progress_callback=_cb)
-                self.after(0, self._decode_done, ok)
+                ok = self._dec_decoder.decode(video_file, output_dir, progress_callback=_cb)
+                if getattr(self._dec_decoder, '_cancelled', False):
+                    self.after(0, self._decode_cancelled)
+                else:
+                    self.after(0, self._decode_done, ok)
             except Exception as exc:
-                self.after(0, self._decode_error, str(exc))
+                if getattr(self._dec_decoder, '_cancelled', False):
+                    self.after(0, self._decode_cancelled)
+                else:
+                    self.after(0, self._decode_error, str(exc))
+            finally:
+                self._dec_decoder = None
 
-        threading.Thread(target=_worker, daemon=True).start()
+        self._dec_thread = threading.Thread(target=_worker, daemon=True)
+        self._dec_thread.start()
 
     def _update_dec_progress(self, pct: int) -> None:
         self.dec_progress['value'] = pct
         self._log(self.dec_log, f"  Progress: {pct}%")
 
     def _decode_done(self, ok: bool) -> None:
-        self.dec_btn.configure(state='normal')
+        self.dec_btn.configure(state='normal', text="▶  Decode")
         if ok:
             self._log(self.dec_log, "\nDecode complete!")
             messagebox.showinfo("Decode complete", "File recovered successfully.")
@@ -427,8 +477,13 @@ class App(tk.Tk):
             self._log(self.dec_log, "\nDecode incomplete. See log.")
             messagebox.showwarning("Decode", "Decode finished with issues. See log.")
 
+    def _decode_cancelled(self) -> None:
+        self.dec_btn.configure(state='normal', text="▶  Decode")
+        self.dec_progress['value'] = 0
+        self._log(self.dec_log, "\n⏹ Cancelled.")
+
     def _decode_error(self, msg: str) -> None:
-        self.dec_btn.configure(state='normal')
+        self.dec_btn.configure(state='normal', text="▶  Decode")
         self._log(self.dec_log, f"\nError: {msg}")
         messagebox.showerror("Error", msg)
 
