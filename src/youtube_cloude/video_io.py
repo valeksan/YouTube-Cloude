@@ -25,25 +25,43 @@ def _win_hide_kwargs() -> dict:
     return {}
 
 
-def _bundled_bin(name: str) -> Optional[str]:
-    """Check for ffmpeg/ffprobe bundled next to the executable (Nuitka)."""
-    # 1) next to the running executable (Nuitka standalone / onefile)
+def _next_to_exe(name: str) -> Optional[str]:
+    """Check for ffmpeg/ffprobe placed next to the main executable on disk (user override)."""
     exe_dir = Path(sys.executable).parent
     for cand in [exe_dir / name, exe_dir / f"{name}.exe"]:
         if cand.exists():
             return str(cand)
-    # 2) next to this file (dev / package install)
+    return None
+
+
+def _bundled_bin(name: str) -> Optional[str]:
+    """Check for ffmpeg/ffprobe bundled inside the Nuitka payload (fallback)."""
+    # 1) opposite of _next_to_exe: inside extracted temp / package data
+    #    (Nuitka onefile extracts data files to a temp dir; check pkg dir)
     pkg_dir = Path(__file__).parent
-    for cand in [pkg_dir / name, pkg_dir / f"{name}.exe", pkg_dir.parent.parent / "ffmpeg-bin" / name,
+    for cand in [pkg_dir / name, pkg_dir / f"{name}.exe",
+                 pkg_dir.parent.parent / "ffmpeg-bin" / name,
                  pkg_dir.parent.parent / "ffmpeg-bin" / f"{name}.exe"]:
         if cand.exists():
             return str(cand)
-    # 3) relative to executable's dist folder (Linux .dist)
+    # 2) relative to executable's dist folder (Linux .dist / AppImage usr)
+    exe_dir = Path(sys.executable).parent
     for parent in [exe_dir, exe_dir.parent]:
         for cand in [parent / name, parent / f"{name}.exe",
                      parent / "ffmpeg-bin" / name, parent / "ffmpeg-bin" / f"{name}.exe"]:
+            # _next_to_exe already checked exe_dir directly; here we check parents/dist subfolders
+            # avoid duplicate hit for exe_dir itself (handled above)
+            if parent == exe_dir:
+                continue
             if cand.exists():
                 return str(cand)
+    # 3) Nuitka onefile temp: sys._MEIPASS or __nuitka_binary_dir (if available)
+    for attr in ['_MEIPASS', '__nuitka_binary_dir']:
+        base = getattr(sys, attr, None)
+        if base:
+            for cand in [Path(base) / name, Path(base) / f"{name}.exe"]:
+                if cand.exists():
+                    return str(cand)
     return None
 
 
@@ -69,37 +87,48 @@ def _env_override(name: str) -> Optional[str]:
 
 
 def _find_ffmpeg() -> str:
-    """Return path to ffmpeg binary (env > bundled > PATH) or raise."""
+    """Return path to ffmpeg binary.
+
+    Priority (as requested): --ffmpeg/env > next-to-exe > PATH > bundled.
+    This lets a user drop ffmpeg.exe next to youtube-cloude.exe to override,
+    uses system ffmpeg if in PATH, and falls back to the static bundled copy.
+    """
     env = _env_override('ffmpeg')
     if env:
         return env
-    bundled = _bundled_bin('ffmpeg')
-    if bundled:
-        return bundled
+    nxt = _next_to_exe('ffmpeg')
+    if nxt:
+        return nxt
     path = shutil.which('ffmpeg')
     if path:
         return path
+    bundled = _bundled_bin('ffmpeg')
+    if bundled:
+        return bundled
     raise FileNotFoundError(
-        "ffmpeg not found. Install it: "
-        "apt install ffmpeg / brew install ffmpeg / "
-        "https://ffmpeg.org/download.html"
-        " or place ffmpeg next to the executable, or set YOUTUBE_CLOUDE_FFMPEG."
+        "ffmpeg not found. Place ffmpeg next to the executable, "
+        "install it (apt/brew/choco), set YOUTUBE_CLOUDE_FFMPEG or --ffmpeg, "
+        "or use the bundled build."
     )
 
 
 def _find_ffprobe() -> str:
-    """Return path to ffprobe binary (env > bundled > PATH) or raise."""
+    """Return path to ffprobe binary (env > next-to-exe > PATH > bundled) or raise."""
     env = _env_override('ffprobe')
     if env:
         return env
-    bundled = _bundled_bin('ffprobe')
-    if bundled:
-        return bundled
+    nxt = _next_to_exe('ffprobe')
+    if nxt:
+        return nxt
     path = shutil.which('ffprobe')
     if path:
         return path
+    bundled = _bundled_bin('ffprobe')
+    if bundled:
+        return bundled
     raise FileNotFoundError(
-        "ffprobe not found. Install ffmpeg (includes ffprobe) or set YOUTUBE_CLOUDE_FFPROBE."
+        "ffprobe not found. Place ffprobe next to the executable, "
+        "install ffmpeg, set YOUTUBE_CLOUDE_FFPROBE, or use bundled build."
     )
 
 
