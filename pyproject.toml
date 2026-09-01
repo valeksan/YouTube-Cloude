@@ -5,7 +5,7 @@ build-backend = "setuptools.build_meta"
 [project]
 name = "youtube-cloude"
 version = "1.1.1"
-description = "Steganographic file storage in YouTube videos — encode files into colour-block video frames"
+description = "Cross-platform app (CLI + Qt/Kivy GUI, Windows/Linux/macOS/Android) to store files in YouTube videos — YTV1/YTV2/YTV3, AES-256-GCM, Reed-Solomon"
 readme = "README.md"
 license = {text = "Proprietary — see README.md"}
 requires-python = ">=3.10"

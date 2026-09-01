@@ -10,7 +10,7 @@
 [![Tests](https://github.com/valeksan/YouTube-Cloude/actions/workflows/test.yml/badge.svg)](https://github.com/valeksan/YouTube-Cloude/actions/workflows/test.yml)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)]()
 
-*Encode any file into a video of colour-block frames, upload to YouTube, and download it back — even if YouTube re-encodes the video.*
+*Cross-platform app (CLI + Qt/Kivy GUI, Windows/Linux/macOS/Android) to hide any file in a YouTube video and restore it later — YTV1/YTV2/YTV3 (Reed-Solomon), AES-256-GCM, bundled ffmpeg.*
 
 </div>
 
