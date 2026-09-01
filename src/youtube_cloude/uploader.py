@@ -143,7 +143,7 @@ def upload_to_youtube(
     client_secret = Path(key_file) if key_file else Path('client_secret.json')
 
     if not client_secret.exists():
-        print(f"Error: {client_secret} not found.")
+        print("Error: OAuth client secret file not found.")
         _print_upload_instructions()
         return None
 
