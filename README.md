@@ -76,7 +76,7 @@ This software is provided **"as is"** without warranty of any kind. The authors 
 - 🔐 **AES-256-GCM encryption** — PBKDF2-HMAC-SHA256 (200k iters) + random salt/nonce/tag, legacy CBC still decodes
 - 🎞️ **Three formats** — YTV1 (standard), YTV2 (21× denser), **YTV3** (30 FPS, RS + luma, yuv420p-resilient)
 - 📊 **Reed-Solomon + CRC32** — RS(255,223) corrects 16 byte errors/chunk (YTV3)[^rs] + CRC32 on all formats
-- 🔀 **Interlacing** — improved YouTube retention (YTV1/YTV2, ignored for YTV3)
+- 🔀 **Interlacing** — improved YouTube retention (YTV1/YTV2, ignored for YTV3)[^il]
 - 🗜️ **zlib compression** — `--compress` before encoding, auto-skipped if would enlarge
 - 🖥️ **GUI** — PySide6 (Qt) primary, unified `gui_service` layer; Tkinter deprecated, Kivy for Android
 - 📱 **Android** — Buildozer APK (arm64, API 33), Kivy GUI
@@ -209,7 +209,7 @@ make test-fast      # stop on first failure
 | Palette | 16 colours (4 bit) | 16 colours (4 bit) | **4 grays (2 bit luma)** |
 | ECC | none | 3× replication | **RS(255,223)**[^rs] |
 | **Density** | **1×** | **21.3×** | **~16× + RS** |
-| yuv420p safe | No (needs interlace) | No (needs interlace) | **Yes** |
+| yuv420p safe | No (needs interlace)[^il] | No (needs interlace)[^il] | **Yes** |
 | Max file (default) | 100 MB (~3.4h) | 500 MB (~48 min) | 500 MB (~32 min) |
 | Max file (override) | `--max-size 200` | `--max-size 200` | `--max-size 200` |
 
@@ -243,7 +243,7 @@ make test-fast      # stop on first failure
 - **Interlace produces 15× larger files** (yuv444p CRF 0) — YTV3 avoids this entirely
 - **Compress** (`--compress` zlib) on this incompressible PNG shows no gain (as expected); on text/logs yields 100–200× reduction (see §Compression)
 
-## How Interlace Works
+## How Interlace Works[^il]
 
 ### The Pipeline
 
@@ -403,6 +403,8 @@ If you are the original author ([@KorocheVolgin](https://github.com/KorocheVolgi
 Until then, please respect the author's rights and use this code for personal/educational purposes only.
 
 [^rs]: **Reed-Solomon (RS)** — error-correcting code used in QR codes, CDs and satellite links. `RS(255,223)` means each 255-byte chunk carries 223 data bytes + 32 parity bytes and can fix up to 16 erroneous bytes per chunk. In YTV3 it is applied before 2-bit luma blocking, so a few color shifts or lost blocks after YouTube's `yuv420p` re-encode are automatically repaired — no interlacing needed.
+
+[^il]: **Interlacing** — mitigation for YouTube's H.264 `yuv420p` chroma subsampling. Before encoding, the frame's top and bottom halves are interleaved row-by-row (`even ← top`, `odd ← bottom`), which makes adjacent rows spatially uncorrelated; the codec then preserves more detail under lossy re-encode. On decode the rows are de-interleaved. Cost: requires lossless `yuv444p` `CRF 0`, so files become ~15× larger (e.g. 17.9 MB → 137 MB for YTV2). YTV3 avoids this by using luma-only grayscale blocks + Reed-Solomon.
 
 ---
 
