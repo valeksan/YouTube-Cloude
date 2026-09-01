@@ -279,10 +279,21 @@ class App(tk.Tk):
         frame.columnconfigure(0, weight=1)
 
     # ── File browsers ───────────────────────────────────────────────────
+    def _auto_set_output(self, input_path: str) -> None:
+        """Set output video to <input_dir>/<stem>.mp4."""
+        if not input_path.strip():
+            return
+        stem = os.path.splitext(os.path.basename(input_path))[0]
+        if not stem:
+            stem = os.path.basename(input_path)
+        suggested = os.path.join(os.path.dirname(input_path), stem + ".mp4")
+        self.enc_output_var.set(suggested)
+
     def _browse_enc_input(self) -> None:
         path = filedialog.askopenfilename(title="Select file to encode")
         if path:
             self.enc_input_var.set(path)
+            self._auto_set_output(path)
 
     def _browse_enc_output(self) -> None:
         path = filedialog.asksaveasfilename(

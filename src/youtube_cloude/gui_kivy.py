@@ -437,11 +437,27 @@ class YouTubeCloudeApp(App):
                 filters=['All files (*.*)'],
             )
         except ImportError:
-            self.root.ids.enc_input.text = '/sdcard/Download/file.bin'
+            path = '/sdcard/Download/file.bin'
+            self.root.ids.enc_input.text = path
+            self._auto_set_output(path)
+
+    def _auto_set_output(self, input_path: str) -> None:
+        """Set output video to <input_dir>/<stem>.mp4."""
+        import os
+
+        if not input_path.strip():
+            return
+        stem = os.path.splitext(os.path.basename(input_path))[0]
+        if not stem:
+            stem = os.path.basename(input_path)
+        suggested = os.path.join(os.path.dirname(input_path), stem + ".mp4")
+        self.root.ids.enc_output.text = suggested
 
     def _on_input_selected(self, selection: list) -> None:
         if selection:
-            self.root.ids.enc_input.text = selection[0]
+            path = selection[0]
+            self.root.ids.enc_input.text = path
+            self._auto_set_output(path)
 
     def browse_video(self) -> None:
         try:

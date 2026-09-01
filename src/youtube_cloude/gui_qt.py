@@ -361,6 +361,7 @@ class EncodePage(QWidget):
         self.input_edit = QLineEdit()
         self.input_edit.setPlaceholderText("Select file to hide in video...")
         self.input_edit.setReadOnly(True)
+        self.input_edit.textChanged.connect(self._auto_set_output)
         input_row.addWidget(self.input_edit)
         browse_btn = QPushButton("Browse...")
         browse_btn.setFixedWidth(90)
@@ -400,6 +401,18 @@ class EncodePage(QWidget):
 
         layout.addStretch()
 
+    def _auto_set_output(self, input_path: str) -> None:
+        """Set output file to <input_dir>/<stem>.mp4 (without original ext)."""
+        if not input_path.strip():
+            return
+        import os
+
+        stem = os.path.splitext(os.path.basename(input_path))[0]
+        if not stem:  # e.g. ".hidden" or no basename
+            stem = os.path.basename(input_path)
+        suggested = os.path.join(os.path.dirname(input_path), stem + ".mp4")
+        self.output_edit.setText(suggested)
+
     def _browse_input(self) -> None:
         path, _ = QFileDialog.getOpenFileName(
             self, "Select file to encode", "",
@@ -407,6 +420,7 @@ class EncodePage(QWidget):
         )
         if path:
             self.input_edit.setText(path)
+            self._auto_set_output(path)
 
     def _browse_output(self) -> None:
         path, _ = QFileDialog.getSaveFileName(
