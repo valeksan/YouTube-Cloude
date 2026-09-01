@@ -6,3 +6,7 @@ build/
 dist/
 *.spec
 .venv/
+.benchmark_run/
+benchmark_input.png
+ffmpeg-bin/
+nuitka-build/
