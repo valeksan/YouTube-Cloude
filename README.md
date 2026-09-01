@@ -232,8 +232,6 @@ make test-fast      # stop on first failure
 | **YTV3 + compress** | 31.8s | 26.2s | 21.0 MB | 39.1× | YES |
 | **YTV3 + compress + AES** | 31.9s | 26.4s | 21.0 MB | 39.0× | YES |
 
-*Previous system (2026-08-21):* Ryzen 5 1600, 16 GB, Linux 6.12 — YTV1 33.8s/36 MB, YTV2 16.0s/18.5 MB (513 KB input).
-
 ### Key Findings
 
 - **YTV2 is 2.5× faster to encode** than YTV1 (18s vs 46s, fewer frames: 52 vs 79)
@@ -245,22 +243,25 @@ make test-fast      # stop on first failure
 
 ## How Interlace[^il] Works
 
+<details>
+<summary>Details (diagrams + when to use)</summary>
+
 ### The Pipeline
 
 ```
-Interlace кодирование:     YouTube:              Скачанное:
+Interlaced encoding:       YouTube:              Downloaded:
 ┌─────────────────┐   ┌──────────────────┐   ┌──────────────┐
 │ 365 MB lossless │ → │ Re-encode H.264  │ → │ ~5-10 MB     │
 │ yuv444p CRF 0   │   │ yuv420p CRF ~23  │   │ yuv420p      │
 └─────────────────┘   └──────────────────┘   └──────────────┘
-                                              ↓ deinterlace
-                                         ┌──────────────┐
-                                         │ Файл идентичен│
-                                         │ оригиналу!    │
-                                         └──────────────┘
+                                               ↓ deinterlace
+                                          ┌──────────────┐
+                                          │ File identical│
+                                          │ to original!  │
+                                          └──────────────┘
 ```
 
-YouTube **убивает** lossless и yuv444p — оставляет lossy H.264. Но данные внутри блоков переживают, потому что interlace уже "спрятал" их между строками. Кодек видит "шумную" картинку и сохраняет detail. При скачивании — deinterlace, и блоки на месте.
+YouTube **destroys** lossless and `yuv444p` — leaving lossy H.264. But the block data survives because interlacing has already "hidden" it between rows. The codec sees a "noisy" frame and preserves detail. On download — deinterlace, and blocks are intact.
 
 ### The Problem
 
@@ -305,6 +306,8 @@ Interlace requires **lossless encoding** (CRF 0) to preserve the exact block col
 | Upload to YouTube | **Yes** — blocks survive re-encoding |
 | Testing locally | No — not needed |
 | Research / demos | Optional — for completeness |
+
+</details>
 
 ## Project Structure
 
