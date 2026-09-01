@@ -52,7 +52,7 @@ This project is an **educational and research tool** for steganography vs lossy 
 - 🖥️ **GUI** — PySide6 (Qt) primary, unified `gui_service` layer; Tkinter deprecated, Kivy for Android
 - 📱 **Android** — Buildozer APK (arm64, API 33), Kivy GUI
 - 📦 **Batch mode** — encode entire directories at once
-- 📤 **YouTube upload/download** — via yt-dlp and YouTube Data API v3
+- 📤 **YouTube upload/download** — via yt-dlp and YouTube Data API v3 (planned)
 
 ## Quick Start
 
