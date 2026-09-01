@@ -354,8 +354,4 @@ Until then, please respect the author's rights and use this code for personal/ed
 
 ---
 
-<div align="center">
-
-**Keywords:** youtube cloud storage, free cloud drive, store files on youtube, hide files in video, video steganography, file storage, covert channel, youtube as cloud
-
-</div>
+<!-- SEO Keywords (hidden, indexed in raw + topics): youtube cloud storage, free cloud drive, store files on youtube, hide files in video, video steganography, file storage, covert channel, youtube as cloud -->
