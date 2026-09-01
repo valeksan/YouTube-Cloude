@@ -47,8 +47,32 @@ def _bundled_bin(name: str) -> Optional[str]:
     return None
 
 
+def _env_override(name: str) -> Optional[str]:
+    """Check env vars for custom ffmpeg/ffprobe path (highest priority)."""
+    import os
+
+    # YOUTUBE_CLOUDE_FFMPEG / YOUTUBE_CLOUDE_FFPROBE, plus common FFMPEG_PATH
+    keys = {
+        'ffmpeg': ['YOUTUBE_CLOUDE_FFMPEG', 'FFMPEG_PATH', 'FFMPEG'],
+        'ffprobe': ['YOUTUBE_CLOUDE_FFPROBE', 'FFPROBE_PATH', 'FFPROBE'],
+    }
+    for k in keys.get(name, []):
+        val = os.environ.get(k)
+        if val and Path(val).exists():
+            return str(Path(val))
+        # also allow directory containing the binary
+        if val and Path(val).is_dir():
+            for cand in [Path(val) / name, Path(val) / f"{name}.exe"]:
+                if cand.exists():
+                    return str(cand)
+    return None
+
+
 def _find_ffmpeg() -> str:
-    """Return path to ffmpeg binary (bundled first, then PATH) or raise."""
+    """Return path to ffmpeg binary (env > bundled > PATH) or raise."""
+    env = _env_override('ffmpeg')
+    if env:
+        return env
     bundled = _bundled_bin('ffmpeg')
     if bundled:
         return bundled
@@ -59,19 +83,24 @@ def _find_ffmpeg() -> str:
         "ffmpeg not found. Install it: "
         "apt install ffmpeg / brew install ffmpeg / "
         "https://ffmpeg.org/download.html"
-        " or place ffmpeg next to the executable."
+        " or place ffmpeg next to the executable, or set YOUTUBE_CLOUDE_FFMPEG."
     )
 
 
 def _find_ffprobe() -> str:
-    """Return path to ffprobe binary (bundled first, then PATH) or raise."""
+    """Return path to ffprobe binary (env > bundled > PATH) or raise."""
+    env = _env_override('ffprobe')
+    if env:
+        return env
     bundled = _bundled_bin('ffprobe')
     if bundled:
         return bundled
     path = shutil.which('ffprobe')
     if path:
         return path
-    raise FileNotFoundError("ffprobe not found. Install ffmpeg (includes ffprobe).")
+    raise FileNotFoundError(
+        "ffprobe not found. Install ffmpeg (includes ffprobe) or set YOUTUBE_CLOUDE_FFPROBE."
+    )
 
 
 # ── Metadata ────────────────────────────────────────────────────────────────
