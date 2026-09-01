@@ -337,7 +337,7 @@ YouTube-Cloude/
 
 ## Encryption
 
-**Supported:** `AES-256-GCM` with `PBKDF2-HMAC-SHA256` (200 000 iterations). Older files encoded with `AES-256-CBC` are still decoded.
+**Supported:** `AES-256-GCM` with `PBKDF2-HMAC-SHA256` (200 000 iterations).
 
 ```bash
 # Key from command line
