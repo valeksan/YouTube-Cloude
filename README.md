@@ -178,7 +178,7 @@ make test-fast      # stop on first failure
 | Blocks/frame | 2,852 | 24,244 | 19,552 |
 | FPS | 6 | 15 | **30** |
 | Palette | 16 colours (4 bit) | 16 colours (4 bit) | **4 grays (2 bit luma)** |
-| ECC | none | 3× replication | **RS[^rs](255,223)** |
+| ECC | none | 3× replication | **RS[^rs] (255,223)** |
 | **Density** | **1×** | **21.3×** | **~16× + RS** |
 | yuv420p safe | No (needs interlace[^il]) | No (needs interlace[^il]) | **Yes** |
 | Max file (default) | 100 MB (~3.4h) | 500 MB (~48 min) | 500 MB (~32 min) |
@@ -208,7 +208,9 @@ make test-fast      # stop on first failure
 - **YTV2 is 2.5× faster/smaller than YTV1** (18s/17.9 MB vs 46s/45.8 MB)
 - **YTV3** is `yuv420p`-safe without interlace + RS(255,223) for 16-byte correction — avoids 15× interlace bloat
 
-## How Interlace[^il] Works
+## How Interlace Works
+
+> Interlace[^il] — see footnote below.
 
 <details>
 <summary>Details (diagrams + when to use)</summary>
