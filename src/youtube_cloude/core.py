@@ -212,27 +212,20 @@ MAX_FILE_SIZES: dict[str, int] = {
 MAX_FILE_SIZE: int = 100 * 1024 * 1024  # fallback for direct callers
 
 
-# ── AES encryption ─────────────────────────────────────────────────────────
-# Legacy: AES-256-CBC with SHA256 KDF (PR #10 by @Verdgil) kept for
-# backward compatibility. New code uses AES-256-GCM + PBKDF2.
+# ── AES-GCM encryption (PBKDF2) ────────────────────────────────────────────
 # Uses pycryptodome (pip install pycryptodome)
 
 def _get_aes():
     """Lazy-import AES to allow running without pycryptodome when unencrypted."""
     try:
         from Crypto.Cipher import AES as _AES
-        from Crypto.Util.Padding import pad as _pad, unpad as _unpad
-        return _AES, _pad, _unpad
+
+        return _AES, None, None
     except ImportError:
         raise ImportError(
             "pycryptodome is required for AES encryption. "
             "Install it: pip install pycryptodome"
         )
-
-
-def generate_iv() -> bytes:
-    """Generate a cryptographically random 16-byte IV for AES-CBC (legacy)."""
-    return os.urandom(16)
 
 
 def generate_salt() -> bytes:
@@ -245,33 +238,14 @@ def generate_nonce() -> bytes:
     return os.urandom(12)
 
 
-def derive_key(key_str: str) -> bytes:
-    """Legacy: derive a 32-byte key via single SHA-256 (kept for decoding old files)."""
-    import hashlib
-    return hashlib.sha256(key_str.encode('utf-8')).digest()
-
-
 PBKDF2_ITERATIONS: int = 200_000
 
 
 def derive_key_pbkdf2(key_str: str, salt: bytes, iterations: int = PBKDF2_ITERATIONS) -> bytes:
     """Derive a 32-byte key via PBKDF2-HMAC-SHA256."""
     import hashlib
+
     return hashlib.pbkdf2_hmac('sha256', key_str.encode('utf-8'), salt, iterations, dklen=32)
-
-
-def encrypt_data(data: bytes, key: bytes, iv: bytes) -> bytes:
-    """Legacy AES-256-CBC encrypt (kept for decoding old files)."""
-    AES, pad, _ = _get_aes()
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    return cipher.encrypt(pad(data, AES.block_size))
-
-
-def decrypt_data(data: bytes, key: bytes, iv: bytes) -> bytes:
-    """Legacy AES-256-CBC decrypt (kept for decoding old files)."""
-    AES, _, unpad = _get_aes()
-    cipher = AES.new(key, AES.MODE_CBC, iv)
-    return unpad(cipher.decrypt(data), AES.block_size)
 
 
 def encrypt_data_gcm(data: bytes, key: bytes, nonce: bytes) -> tuple[bytes, bytes]:

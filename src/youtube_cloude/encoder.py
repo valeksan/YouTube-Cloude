@@ -21,7 +21,6 @@ import numpy as np
 from .core import (
     WIDTH, HEIGHT, COLORS, GRAY_COLORS, EOF_MARKER, EOF_BYTES,
     get_format, compute_grid, MAX_FILE_SIZES,
-    encrypt_data, generate_iv, derive_key,
     data_to_blocks, data_to_blocks_2bit, rs_encode,
     sanitize_filename, validate_input_file,
     crc32_hex, interlace_frame,
@@ -59,11 +58,9 @@ class YouTubeEncoder:
 
         if key and str(key).strip():
             self._passphrase: Optional[str] = str(key)
-            self.key: Optional[bytes] = derive_key(str(key))  # legacy, kept for reference
             self.use_encryption = True
         else:
             self._passphrase = None
-            self.key = None
             self.use_encryption = False
 
         self.is_ytv3 = g['name'] == 'YTV3'

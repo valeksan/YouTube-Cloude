@@ -20,7 +20,8 @@ from youtube_cloude.core import (
     crc32_hex, verify_crc32,
     interlace_frame, deinterlace_frame,
     data_to_blocks, blocks_to_bytes,
-    generate_iv, derive_key, encrypt_data, decrypt_data,
+    generate_salt, generate_nonce, derive_key_pbkdf2,
+    encrypt_data_gcm, decrypt_data_gcm,
     get_format, compute_grid, detect_format,
     YTV1, YTV2, FORMATS,
 )
@@ -91,43 +92,45 @@ class TestBitConversions:
 
 class TestAES:
     def test_roundtrip(self):
-        key = derive_key('test-password')
-        iv = generate_iv()
+        salt = generate_salt()
+        nonce = generate_nonce()
+        key = derive_key_pbkdf2('test-password', salt)
         data = b'_sensitive data_1234567890'
-        encrypted = encrypt_data(data, key, iv)
-        decrypted = decrypt_data(encrypted, key, iv)
+        ct, tag = encrypt_data_gcm(data, key, nonce)
+        decrypted = decrypt_data_gcm(ct, key, nonce, tag)
         assert decrypted == data
 
     def test_different_ivs_different_ciphertext(self):
-        key = derive_key('test-password')
+        salt = generate_salt()
+        key = derive_key_pbkdf2('test-password', salt)
         data = b'same data'
-        iv1 = generate_iv()
-        iv2 = generate_iv()
-        enc1 = encrypt_data(data, key, iv1)
-        enc2 = encrypt_data(data, key, iv2)
-        assert enc1 != enc2
+        nonce1 = generate_nonce()
+        nonce2 = generate_nonce()
+        ct1, tag1 = encrypt_data_gcm(data, key, nonce1)
+        ct2, tag2 = encrypt_data_gcm(data, key, nonce2)
+        assert ct1 != ct2 or tag1 != tag2
 
     def test_wrong_key_fails(self):
-        key = derive_key('correct-password')
-        iv = generate_iv()
+        salt = generate_salt()
+        nonce = generate_nonce()
+        key = derive_key_pbkdf2('correct-password', salt)
         data = b'secret'
-        encrypted = encrypt_data(data, key, iv)
-        wrong_key = derive_key('wrong-password')
-        # AES-CBC + unpad may or may not raise depending on garbage bytes.
-        # Verify the decrypted data is NOT the original.
+        ct, tag = encrypt_data_gcm(data, key, nonce)
+        wrong_key = derive_key_pbkdf2('wrong-password', salt)
         try:
-            decrypted = decrypt_data(encrypted, wrong_key, iv)
+            decrypted = decrypt_data_gcm(ct, wrong_key, nonce, tag)
             assert decrypted != data, "Wrong key produced correct data — encryption broken!"
         except Exception:
-            pass  # Raised (bad padding) — also acceptable
+            pass  # MAC check failed — expected
 
     def test_deterministic_with_same_iv(self):
-        key = derive_key('test')
-        iv = generate_iv()
+        salt = generate_salt()
+        nonce = generate_nonce()
+        key = derive_key_pbkdf2('test', salt)
         data = b'deterministic'
-        enc1 = encrypt_data(data, key, iv)
-        enc2 = encrypt_data(data, key, iv)
-        assert enc1 == enc2
+        ct1, tag1 = encrypt_data_gcm(data, key, nonce)
+        ct2, tag2 = encrypt_data_gcm(data, key, nonce)
+        assert ct1 == ct2 and tag1 == tag2
 
 
 class TestFormatDetection:

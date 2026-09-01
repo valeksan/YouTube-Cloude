@@ -19,7 +19,6 @@ import numpy as np
 from .core import (
     WIDTH, HEIGHT, COLORS, GRAY_COLORS, GRAY_THRESHOLDS, EOF_BYTES,
     get_format, compute_grid, detect_format, detect_format_by_palette,
-    decrypt_data, derive_key,
     blocks_to_bytes, data_to_blocks, blocks_to_bytes_2bit, rs_decode,
     verify_crc32, deinterlace_frame,
 )
@@ -38,13 +37,10 @@ class YouTubeDecoder:
         self._format_configured = False
         self.interlace = interlace
 
-        import hashlib
         if key and str(key).strip():
             self._passphrase: Optional[str] = str(key)
-            self.key: Optional[bytes] = derive_key(str(key))  # legacy fallback
         else:
             self._passphrase = None
-            self.key = None
 
         self.is_ytv3 = (format_name or '').lower() == 'ytv3'
         if self.is_ytv3:
@@ -69,7 +65,7 @@ class YouTubeDecoder:
         print("=" * 60)
         if self._format_configured:
             print(f"  Grid:   {self.blocks_x} x {self.blocks_y} blocks")
-        print(f"  Key:    {'YES' if self.key else 'NO'}")
+        print(f"  Key:    {'YES' if self._passphrase else 'NO'}")
 
     def _configure_format(self, fmt: dict) -> None:
         """Set grid parameters from a format dict."""
@@ -342,13 +338,10 @@ class YouTubeDecoder:
         else:
             print("  Warning: EOF marker not found")
 
-        # Parse header — supports multiple generations:
-        #   GCM:      FORMAT:..:FILE:n:SIZE:123:ENC_SIZE:456:SALT:..:NONCE:..:TAG:..:CRC:abcd| (+ optional :COMPRESS:zlib before ENC_SIZE/CRC)
-        #   AES+CRC:  FORMAT:YTV2:FILE:n:SIZE:123:ENC_SIZE:456:IV:hex:CRC:abcd| (legacy CBC)
-        #   AES:      FORMAT:YTV2:FILE:n:SIZE:123:ENC_SIZE:456:IV:hex|
-        #   CRC:      FORMAT:YTV2:FILE:n:SIZE:123:CRC:abcd|
-        #   Plain:    FORMAT:YTV2:FILE:n:SIZE:123|
-        #   Legacy:   FILE:n:SIZE:123|  (backward compat, XOR era)
+        # Parse header — GCM only (legacy CBC removed)
+        #   GCM:      FORMAT:..:FILE:n:SIZE:123:ENC_SIZE:456:SALT:..:NONCE:..:TAG:..:CRC:abcd|
+        #   CRC:      FORMAT:..:FILE:n:SIZE:123:CRC:abcd|
+        #   Plain:    FORMAT:..:FILE:n:SIZE:123|
         data_str = bytes_data[:2000].decode('utf-8', errors='ignore')
         if 'FORMAT:' not in data_str:
             data_str = bytes_data[:2000].decode('latin-1', errors='ignore')
@@ -358,20 +351,10 @@ class YouTubeDecoder:
             # GCM compressed — PBKDF2 + AES-GCM with :COMPRESS:zlib
             (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):COMPRESS:([^:]+):ENC_SIZE:(\d+):SALT:([0-9a-fA-F]{32}):NONCE:([0-9a-fA-F]{24}):TAG:([0-9a-fA-F]{32}):CRC:([0-9a-fA-F]{8})\|',
              'gcm_compress'),
-            # GCM (new) — PBKDF2 + AES-GCM
+            # GCM — PBKDF2 + AES-GCM
             (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):ENC_SIZE:(\d+):SALT:([0-9a-fA-F]{32}):NONCE:([0-9a-fA-F]{24}):TAG:([0-9a-fA-F]{32}):CRC:([0-9a-fA-F]{8})\|',
              'gcm'),
-            # AES + CRC (legacy CBC) — with optional COMPRESS
-            (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):COMPRESS:([^:]+):ENC_SIZE:(\d+):IV:([0-9a-fA-F]{32}):CRC:([0-9a-fA-F]{8})\|',
-             'aes_crc_compress'),
-            (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):ENC_SIZE:(\d+):IV:([0-9a-fA-F]{32}):CRC:([0-9a-fA-F]{8})\|',
-             'aes_crc'),
-            # AES only (legacy) with COMPRESS
-            (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):COMPRESS:([^:]+):ENC_SIZE:(\d+):IV:([0-9a-fA-F]{32})\|',
-             'aes_compress'),
-            (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):ENC_SIZE:(\d+):IV:([0-9a-fA-F]{32})\|',
-             'aes'),
-            # CRC only (pre-AES) with COMPRESS
+            # CRC only with COMPRESS
             (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):COMPRESS:([^:]+):CRC:([0-9a-fA-F]{8})\|',
              'crc_compress'),
             (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+):CRC:([0-9a-fA-F]{8})\|',
@@ -381,13 +364,9 @@ class YouTubeDecoder:
              'plain_compress'),
             (r'FORMAT:([^:]+):FILE:([^:]+):SIZE:(\d+)\|',
              'plain'),
-            # Legacy
-            (r'FILE:([^:]+):SIZE:(\d+)\|',
-             'legacy'),
         ]
 
         expected_crc: Optional[str] = None
-        iv_hex: Optional[str] = None
         salt_hex: Optional[str] = None
         nonce_hex: Optional[str] = None
         tag_hex: Optional[str] = None
@@ -423,34 +402,6 @@ class YouTubeDecoder:
                     nonce_hex = match.group(6)
                     tag_hex = match.group(7)
                     expected_crc = match.group(8).lower()
-                elif htype == 'aes_crc_compress':
-                    header_format = match.group(1)
-                    filename = match.group(2)
-                    filesize = int(match.group(3))
-                    compress_algo = match.group(4)
-                    enc_size = int(match.group(5))
-                    iv_hex = match.group(6)
-                    expected_crc = match.group(7).lower()
-                elif htype == 'aes_crc':
-                    header_format = match.group(1)
-                    filename = match.group(2)
-                    filesize = int(match.group(3))
-                    enc_size = int(match.group(4))
-                    iv_hex = match.group(5)
-                    expected_crc = match.group(6).lower()
-                elif htype == 'aes_compress':
-                    header_format = match.group(1)
-                    filename = match.group(2)
-                    filesize = int(match.group(3))
-                    compress_algo = match.group(4)
-                    enc_size = int(match.group(5))
-                    iv_hex = match.group(6)
-                elif htype == 'aes':
-                    header_format = match.group(1)
-                    filename = match.group(2)
-                    filesize = int(match.group(3))
-                    enc_size = int(match.group(4))
-                    iv_hex = match.group(5)
                 elif htype == 'crc_compress':
                     header_format = match.group(1)
                     filename = match.group(2)
@@ -471,9 +422,6 @@ class YouTubeDecoder:
                     header_format = match.group(1)
                     filename = match.group(2)
                     filesize = int(match.group(3))
-                elif htype == 'legacy':
-                    filename = match.group(1)
-                    filesize = int(match.group(2))
                 break
 
         if not match:
@@ -503,8 +451,6 @@ class YouTubeDecoder:
             print(f"  SALT:         {salt_hex}")
             print(f"  NONCE:        {nonce_hex}")
             print(f"  TAG:          {tag_hex}")
-        if iv_hex:
-            print(f"  AES IV:       {iv_hex} (legacy CBC)")
         if expected_crc:
             print(f"  CRC32:        {expected_crc}")
 
@@ -528,7 +474,7 @@ class YouTubeDecoder:
             ]
 
             if salt_hex and nonce_hex and tag_hex:
-                # New: AES-256-GCM + PBKDF2
+                # AES-256-GCM + PBKDF2
                 if self._passphrase:
                     from .core import derive_key_pbkdf2, decrypt_data_gcm, PBKDF2_ITERATIONS
                     try:
@@ -545,23 +491,9 @@ class YouTubeDecoder:
                 else:
                     print("  Warning: GCM encrypted data but no key provided")
                     file_data = encrypted_data
-            elif self.key and iv_hex:
-                # Legacy AES-256-CBC
-                iv = bytes.fromhex(iv_hex)
-                try:
-                    file_data = decrypt_data(encrypted_data, self.key, iv)
-                    print("  Data decrypted (AES-256-CBC legacy)")
-                except Exception as e:
-                    print(f"  Decryption failed: {e}")
-                    print("  Saving raw data instead...")
-                    file_data = encrypted_data
-            elif self.key and not iv_hex and not salt_hex:
-                # Legacy XOR (pre-AES headers)
-                print("  Warning: legacy XOR header detected, AES key cannot decrypt")
-                file_data = encrypted_data
             else:
                 file_data = encrypted_data
-                if salt_hex or iv_hex:
+                if salt_hex:
                     print("  Warning: encrypted data but no key provided")
                 else:
                     print("  Data not encrypted")
