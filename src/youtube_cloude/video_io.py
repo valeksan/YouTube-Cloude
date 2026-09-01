@@ -9,11 +9,20 @@ import json
 import shutil
 import struct
 import subprocess
+import sys
 import tempfile
 from pathlib import Path
 from typing import Generator, Optional
 
 import numpy as np
+
+
+def _win_hide_kwargs() -> dict:
+    """Return subprocess kwargs to hide console window on Windows."""
+    if sys.platform.startswith('win'):
+        # CREATE_NO_WINDOW prevents a new console window for ffmpeg/ffprobe
+        return {'creationflags': getattr(subprocess, 'CREATE_NO_WINDOW', 0x08000000)}
+    return {}
 
 
 def _find_ffmpeg() -> str:
@@ -52,7 +61,7 @@ def probe_video(video_file: str) -> dict:
         '-show_streams',
         str(video_file),
     ]
-    result = subprocess.run(cmd, capture_output=True, text=True, check=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, check=True, **_win_hide_kwargs())
     info = json.loads(result.stdout)
 
     # Find the video stream
@@ -138,7 +147,7 @@ def read_frames(
         'pipe:1',
     ])
 
-    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    proc = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE, **_win_hide_kwargs())
 
     frame_size = width * height * 3  # BGR = 3 bytes per pixel
     frame_num = start_frame
@@ -248,7 +257,7 @@ def png_sequence_to_mp4(
         output_file,
     ])
 
-    result = subprocess.run(cmd, capture_output=True, text=True)
+    result = subprocess.run(cmd, capture_output=True, text=True, **_win_hide_kwargs())
     if result.returncode != 0:
         print(f"  ffmpeg error: {result.stderr}")
         return False
