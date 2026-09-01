@@ -83,6 +83,22 @@ def add_compress_arg(subparser: argparse._SubParsersAction) -> None:  # type: ig
     )
 
 
+def add_ffmpeg_args(parser) -> None:  # type: ignore[type-arg]
+    """Add custom ffmpeg/ffprobe path args."""
+    parser.add_argument(
+        '--ffmpeg',
+        metavar='PATH',
+        default=None,
+        help='Custom ffmpeg binary (default: bundled, then PATH, or $YOUTUBE_CLOUDE_FFMPEG)',
+    )
+    parser.add_argument(
+        '--ffprobe',
+        metavar='PATH',
+        default=None,
+        help='Custom ffprobe binary (default: bundled, then PATH, or $YOUTUBE_CLOUDE_FFPROBE)',
+    )
+
+
 def add_max_size_arg(subparser: argparse._SubParsersAction) -> None:  # type: ignore[type-arg]
     """Add max file size argument to *subparser*."""
     subparser.add_argument(
@@ -132,7 +148,7 @@ examples:
     # encode
     enc = subparsers.add_parser(
         'encode',
-        help='Encode a file into video (--key, --format, --interlace, --max-size)',
+        help='Encode a file into video (--key, --format, --interlace, --ffmpeg, --max-size)',
     )
     enc.add_argument(
         'input_file', metavar='FILE', help='Path to the file to encode'
@@ -148,12 +164,13 @@ examples:
     add_format_arg(enc)
     add_interlace_arg(enc)
     add_compress_arg(enc)
+    add_ffmpeg_args(enc)
     add_max_size_arg(enc)
 
     # encode-dir (batch mode)
     enc_dir = subparsers.add_parser(
         'encode-dir',
-        help='Batch-encode all files in a directory (--key, --format, --interlace, --compress, --max-size)',
+        help='Batch-encode all files in a directory (--key, --format, --interlace, --compress, --ffmpeg, --max-size)',
     )
     enc_dir.add_argument(
         'input_dir', metavar='DIR', help='Directory containing files to encode'
@@ -169,12 +186,13 @@ examples:
     add_format_arg(enc_dir)
     add_interlace_arg(enc_dir)
     add_compress_arg(enc_dir)
+    add_ffmpeg_args(enc_dir)
     add_max_size_arg(enc_dir)
 
     # decode
     dec = subparsers.add_parser(
         'decode',
-        help='Decode a video back to a file (--key, --format, --interlace)',
+        help='Decode a video back to a file (--key, --format, --interlace, --ffmpeg)',
     )
     dec.add_argument(
         'video_file', metavar='VIDEO', help='Path to the MP4 to decode'
@@ -189,8 +207,14 @@ examples:
     add_key_args(dec)
     add_format_arg(dec)
     add_interlace_arg(dec)
+    add_ffmpeg_args(dec)
 
     args = parser.parse_args()
+    # Apply custom ffmpeg paths early (env > bundled > PATH)
+    if getattr(args, 'ffmpeg', None):
+        os.environ['YOUTUBE_CLOUDE_FFMPEG'] = args.ffmpeg
+    if getattr(args, 'ffprobe', None):
+        os.environ['YOUTUBE_CLOUDE_FFPROBE'] = args.ffprobe
     key = resolve_key(args)
 
     if args.command == 'encode':
