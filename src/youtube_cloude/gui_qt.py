@@ -659,6 +659,31 @@ class SettingsPage(QWidget):
         self.compress_check.setToolTip("Compress file with zlib before encoding.\nAuto-skipped if would enlarge. Saves huge space for text/logs.")
         layout.addWidget(self.compress_check)
 
+        # ── FFmpeg ──
+        ff_group = QGroupBox("FFmpeg (advanced)")
+        ff_layout = QVBoxLayout(ff_group)
+        ff_desc = QLabel("Custom ffmpeg/ffprobe binary. Leave blank to use bundled.")
+        ff_desc.setStyleSheet("color: #8b949e; font-size: 12px;")
+        ff_layout.addWidget(ff_desc)
+        ff_row = QHBoxLayout()
+        self.ffmpeg_edit = QLineEdit()
+        self.ffmpeg_edit.setPlaceholderText("Path to ffmpeg.exe / ffmpeg (blank = bundled)")
+        ff_row.addWidget(self.ffmpeg_edit)
+        self.ffmpeg_browse_btn = QPushButton("Browse...")
+        self.ffmpeg_browse_btn.clicked.connect(self._browse_ffmpeg)
+        ff_row.addWidget(self.ffmpeg_browse_btn)
+        self.ffmpeg_reset_btn = QPushButton("Use bundled")
+        self.ffmpeg_reset_btn.setToolTip("Clear and use bundled ffmpeg")
+        self.ffmpeg_reset_btn.clicked.connect(self._reset_ffmpeg)
+        ff_row.addWidget(self.ffmpeg_reset_btn)
+        ff_layout.addLayout(ff_row)
+        self.ffmpeg_status = QLabel("")
+        self.ffmpeg_status.setStyleSheet("color: #8b949e; font-size: 11px;")
+        ff_layout.addWidget(self.ffmpeg_status)
+        self.ffmpeg_edit.textChanged.connect(self._on_ffmpeg_changed)
+        layout.addWidget(ff_group)
+        self._load_ffmpeg_setting()
+
         # ── Encryption ──
         enc_group = QGroupBox("Encryption (AES-256-GCM)")
         enc_layout = QVBoxLayout(enc_group)
@@ -695,6 +720,66 @@ class SettingsPage(QWidget):
         )
         credits.setStyleSheet("color: #484f58; font-size: 12px;")
         layout.addWidget(credits)
+
+    def _load_ffmpeg_setting(self) -> None:
+        s = QSettings("valeksan", "YouTube-Cloude")
+        path = s.value("ffmpeg_path", "", type=str) or os.environ.get("YOUTUBE_CLOUDE_FFMPEG", "")
+        if path:
+            self.ffmpeg_edit.setText(path)
+            self._apply_ffmpeg_path(path)
+        else:
+            self._update_ffmpeg_status()
+
+    def _apply_ffmpeg_path(self, path: str) -> None:
+        path = path.strip()
+        s = QSettings("valeksan", "YouTube-Cloude")
+        if path:
+            s.setValue("ffmpeg_path", path)
+            os.environ["YOUTUBE_CLOUDE_FFMPEG"] = path
+            # derive ffprobe from same dir if not set separately
+            p = os.path.dirname(path)
+            probe = os.path.join(p, "ffprobe.exe" if sys.platform.startswith("win") else "ffprobe")
+            if os.path.exists(probe):
+                os.environ["YOUTUBE_CLOUDE_FFPROBE"] = probe
+        else:
+            s.remove("ffmpeg_path")
+            os.environ.pop("YOUTUBE_CLOUDE_FFMPEG", None)
+            os.environ.pop("YOUTUBE_CLOUDE_FFPROBE", None)
+        self._update_ffmpeg_status()
+
+    def _update_ffmpeg_status(self) -> None:
+        path = self.ffmpeg_edit.text().strip()
+        if not path:
+            # check bundled
+            try:
+                from youtube_cloude.video_io import _find_ffmpeg
+                found = _find_ffmpeg()
+                self.ffmpeg_status.setText(f"Using: {found} (bundled/system)")
+                self.ffmpeg_status.setStyleSheet("color: #3fb950; font-size: 11px;")
+            except Exception as e:
+                self.ffmpeg_status.setText(str(e))
+                self.ffmpeg_status.setStyleSheet("color: #f85149; font-size: 11px;")
+            return
+        if os.path.exists(path):
+            self.ffmpeg_status.setText(f"Using custom: {path}")
+            self.ffmpeg_status.setStyleSheet("color: #58a6ff; font-size: 11px;")
+        else:
+            self.ffmpeg_status.setText("File not found")
+            self.ffmpeg_status.setStyleSheet("color: #f85149; font-size: 11px;")
+
+    def _browse_ffmpeg(self) -> None:
+        path, _ = QFileDialog.getOpenFileName(self, "Select ffmpeg binary", "", "Executable (*.exe);;All files (*.*)")
+        if path:
+            self.ffmpeg_edit.setText(path)
+            self._apply_ffmpeg_path(path)
+
+    def _reset_ffmpeg(self) -> None:
+        self.ffmpeg_edit.clear()
+        self._apply_ffmpeg_path("")
+
+    def _on_ffmpeg_changed(self, _text: str) -> None:
+        # apply on change but don't spam; save on edit finish via apply
+        self._apply_ffmpeg_path(self.ffmpeg_edit.text())
 
     @Slot(bool)
     def _toggle_key_visibility(self, checked: bool) -> None:
