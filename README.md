@@ -149,6 +149,8 @@ youtube-cloude decode video.mp4 --key "my-password"
 youtube-cloude encode-dir ./my-data/ ./output/ --format ytv3 --compress
 ```
 
+> **Note:** Output `.mp4` can be freely renamed — the original filename is stored inside the video header (`FORMAT:...:FILE:<name>`). On decode the file is always restored with its original name, regardless of what the `.mp4` is called (including YouTube's `videoplayback.mp4` after download).
+
 ### Launch GUI
 
 ```bash
