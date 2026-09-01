@@ -75,7 +75,7 @@ This software is provided **"as is"** without warranty of any kind. The authors 
 
 - 🔐 **AES-256-GCM encryption** — PBKDF2-HMAC-SHA256 (200k iters) + random salt/nonce/tag, legacy CBC still decodes
 - 🎞️ **Three formats** — YTV1 (standard), YTV2 (21× denser), **YTV3** (30 FPS, RS + luma, yuv420p-resilient)
-- 📊 **Reed-Solomon + CRC32** — RS(255,223) corrects 16 byte errors/chunk (YTV3) + CRC32 on all formats
+- 📊 **Reed-Solomon + CRC32** — RS(255,223) corrects 16 byte errors/chunk (YTV3)[^rs] + CRC32 on all formats
 - 🔀 **Interlacing** — improved YouTube retention (YTV1/YTV2, ignored for YTV3)
 - 🗜️ **zlib compression** — `--compress` before encoding, auto-skipped if would enlarge
 - 🖥️ **GUI** — PySide6 (Qt) primary, unified `gui_service` layer; Tkinter deprecated, Kivy for Android
@@ -207,7 +207,7 @@ make test-fast      # stop on first failure
 | Blocks/frame | 2,852 | 24,244 | 19,552 |
 | FPS | 6 | 15 | **30** |
 | Palette | 16 colours (4 bit) | 16 colours (4 bit) | **4 grays (2 bit luma)** |
-| ECC | none | 3× replication | **RS(255,223)** |
+| ECC | none | 3× replication | **RS(255,223)**[^rs] |
 | **Density** | **1×** | **21.3×** | **~16× + RS** |
 | yuv420p safe | No (needs interlace) | No (needs interlace) | **Yes** |
 | Max file (default) | 100 MB (~3.4h) | 500 MB (~48 min) | 500 MB (~32 min) |
@@ -401,6 +401,8 @@ Contributions are welcome! Please open an issue or submit a pull request.
 If you are the original author ([@KorocheVolgin](https://github.com/KorocheVolgin)) or a contributor and would like to add an open-source license (e.g., MIT), please open an issue or contact me. Adding a license would benefit the entire community.
 
 Until then, please respect the author's rights and use this code for personal/educational purposes only.
+
+[^rs]: **Reed-Solomon (RS)** — error-correcting code used in QR codes, CDs and satellite links. `RS(255,223)` means each 255-byte chunk carries 223 data bytes + 32 parity bytes and can fix up to 16 erroneous bytes per chunk. In YTV3 it is applied before 2-bit luma blocking, so a few color shifts or lost blocks after YouTube's `yuv420p` re-encode are automatically repaired — no interlacing needed.
 
 ---
 
