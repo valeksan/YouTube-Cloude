@@ -356,6 +356,6 @@ Until then, please respect the author's rights and use this code for personal/ed
 
 <div align="center">
 
-**Keywords:** youtube steganography, file-to-video, covert channel, Reed-Solomon, AES-GCM PBKDF2, ytv3, yuv420p, ffmpeg, Nuitka, Kivy Android
+**Keywords:** youtube cloud storage, free cloud drive, store files on youtube, hide files in video, video steganography, file storage, covert channel, youtube as cloud
 
 </div>
