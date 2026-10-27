@@ -341,6 +341,12 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
 
+      - name: Set up JDK 17
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
       - name: Install system dependencies
         shell: bash
         run: |
@@ -350,7 +356,7 @@ jobs:
             pkg-config \
             zlib1g-dev libncurses-dev \
             cmake libffi-dev libssl-dev \
-            openjdk-17-jdk unzip wget \
+            unzip wget \
             lld clang
           # Verify: LT_SYS_SYMBOL_USCORE macro is now available
           grep -q "LT_SYS_SYMBOL_USCORE" /usr/share/aclocal/ltdl.m4 && \
@@ -359,7 +365,7 @@ jobs:
 
       - name: Install Buildozer + Kivy
         shell: bash
-        run: pip install buildozer cython kivy
+        run: pip install buildozer==1.5.0 cython==0.29.36 kivy==2.3.0
 
       - name: Create buildozer.spec
         shell: bash
@@ -378,7 +384,7 @@ jobs:
           source.include_exts = py,png,jpg,kv,atlas
           source.main = youtube_cloude.gui_kivy:main
           version = ANDROIDVERSIONPLACEHOLDER
-          requirements = python3,kivy,numpy,pillow,pycryptodome,requests==2.25.1
+          requirements = python3,kivy,numpy,pillow,pycryptodome,reedsolo,requests==2.25.1
           orientation = portrait
           fullscreen = 0
           android.permissions = CAMERA,INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
