@@ -23,7 +23,7 @@ from youtube_cloude.core import (
     generate_salt, generate_nonce, derive_key_pbkdf2,
     encrypt_data_gcm, decrypt_data_gcm,
     get_format, compute_grid, detect_format,
-    YTV1, YTV2, FORMATS,
+    YTV2, YTV3, FORMATS,
 )
 
 
@@ -134,11 +134,6 @@ class TestAES:
 
 
 class TestFormatDetection:
-    def test_get_format_ytv1(self):
-        fmt = get_format('ytv1')
-        assert fmt['name'] == 'YTV1'
-        assert fmt['fps'] == 6
-
     def test_get_format_ytv2(self):
         fmt = get_format('ytv2')
         assert fmt['name'] == 'YTV2'
@@ -148,20 +143,11 @@ class TestFormatDetection:
         with pytest.raises(ValueError):
             get_format('ytv99')
 
-    def test_compute_grid_ytv1(self):
-        g = compute_grid(YTV1)
-        assert g['blocks_x'] == 62
-        assert g['blocks_y'] == 46
-        assert g['blocks_per_region'] == 2852
-
     def test_compute_grid_ytv2(self):
         g = compute_grid(YTV2)
         assert g['blocks_x'] == 209
         assert g['blocks_y'] == 116
         assert g['blocks_per_region'] == 24244
-
-    def test_detect_format_80px(self):
-        assert detect_format(80)['name'] == 'YTV1'
 
     def test_detect_format_16px(self):
         assert detect_format(16)['name'] == 'YTV2'
@@ -224,23 +210,23 @@ class TestEncodeDecodeRoundtrip:
 
     def test_small_text_no_encrypt(self, tmp_dir):
         data = b'Hello, YouTube-Cloude! This is a test file.'
-        self._roundtrip(data, 'test.txt', 'ytv1', tmp_dir=tmp_dir)
+        self._roundtrip(data, 'test.txt', 'ytv2', tmp_dir=tmp_dir)
 
     def test_small_binary_no_encrypt(self, tmp_dir):
         data = os.urandom(1024)
-        self._roundtrip(data, 'random.bin', 'ytv1', tmp_dir=tmp_dir)
+        self._roundtrip(data, 'random.bin', 'ytv2', tmp_dir=tmp_dir)
 
     def test_small_text_with_aes(self, tmp_dir):
         data = b'Secret data encrypted with AES-256-CBC!'
-        self._roundtrip(data, 'secret.txt', 'ytv1', key='my-password', tmp_dir=tmp_dir)
+        self._roundtrip(data, 'secret.txt', 'ytv2', key='my-password', tmp_dir=tmp_dir)
 
     def test_small_text_with_interlace(self, tmp_dir):
         data = b'Interlaced frame test data'
-        self._roundtrip(data, 'interlaced.txt', 'ytv1', interlace=True, tmp_dir=tmp_dir)
+        self._roundtrip(data, 'interlaced.txt', 'ytv2', interlace=True, tmp_dir=tmp_dir)
 
     def test_small_text_with_aes_and_interlace(self, tmp_dir):
         data = b'AES + interlace combined test'
-        self._roundtrip(data, 'combined.txt', 'ytv1',
+        self._roundtrip(data, 'combined.txt', 'ytv2',
                         key='test-key', interlace=True, tmp_dir=tmp_dir)
 
     @pytest.mark.slow
@@ -255,7 +241,7 @@ class TestEncodeDecodeRoundtrip:
 
     def test_1KB_no_encrypt(self, tmp_dir):
         data = os.urandom(1024)
-        self._roundtrip(data, '1kb.bin', 'ytv1', tmp_dir=tmp_dir)
+        self._roundtrip(data, '1kb.bin', 'ytv2', tmp_dir=tmp_dir)
 
     def test_wrong_key_gives_garbage(self, tmp_dir):
         """Encoding with key A, decoding with key B should NOT match."""
@@ -268,7 +254,7 @@ class TestEncodeDecodeRoundtrip:
             f.write(data)
 
         video = os.path.join(tmp_dir, 'enc.mp4')
-        encoder = YouTubeEncoder(key='correct-key', format_name='ytv1')
+        encoder = YouTubeEncoder(key='correct-key', format_name='ytv2')
         encoder.encode(input_path, video)
 
         decode_dir = os.path.join(tmp_dir, 'wrong_decode')
@@ -380,20 +366,20 @@ class TestYouTubeReencoding:
             f"Original {len(data)} bytes, restored {len(restored_data)} bytes"
         )
 
-    def test_ytv1_text_youtube(self, tmp_dir):
-        """YTV1, plain text, survives YouTube re-encoding."""
+    def test_ytv2_text_youtube(self, tmp_dir):
+        """YTV2, plain text, survives YouTube re-encoding."""
         data = b'YouTube re-encode test - plain text'
-        self._roundtrip_via_youtube(data, 'yt_text.txt', 'ytv1', tmp_dir=tmp_dir)
+        self._roundtrip_via_youtube(data, 'yt_text.txt', 'ytv2', tmp_dir=tmp_dir)
 
-    def test_ytv1_binary_youtube(self, tmp_dir):
-        """YTV1, random binary data, survives YouTube re-encoding."""
+    def test_ytv2_binary_youtube(self, tmp_dir):
+        """YTV2, random binary data, survives YouTube re-encoding."""
         data = os.urandom(256)
-        self._roundtrip_via_youtube(data, 'yt_random.bin', 'ytv1', tmp_dir=tmp_dir)
+        self._roundtrip_via_youtube(data, 'yt_random.bin', 'ytv2', tmp_dir=tmp_dir)
 
-    def test_ytv1_aes_youtube(self, tmp_dir):
-        """YTV1 + AES encryption survives YouTube re-encoding."""
+    def test_ytv2_aes_youtube(self, tmp_dir):
+        """YTV2 + AES encryption survives YouTube re-encoding."""
         data = b'Encrypted data that must survive YouTube'
-        self._roundtrip_via_youtube(data, 'yt_aes.bin', 'ytv1',
+        self._roundtrip_via_youtube(data, 'yt_aes.bin', 'ytv2',
                                     key='youtube-test-key', tmp_dir=tmp_dir)
 
     def test_ytv2_text_youtube(self, tmp_dir):
@@ -407,7 +393,7 @@ class TestYouTubeReencoding:
         self._roundtrip_via_youtube(data, 'yt2_aes.bin', 'ytv2',
                                     key='ytv2-yt-key', tmp_dir=tmp_dir)
 
-    def test_ytv1_1kb_youtube(self, tmp_dir):
-        """YTV1, 1KB file, survives YouTube re-encoding."""
+    def test_ytv2_1kb_youtube(self, tmp_dir):
+        """YTV2, 1KB file, survives YouTube re-encoding."""
         data = os.urandom(1024)
-        self._roundtrip_via_youtube(data, 'yt_1kb.bin', 'ytv1', tmp_dir=tmp_dir)
+        self._roundtrip_via_youtube(data, 'yt_1kb.bin', 'ytv2', tmp_dir=tmp_dir)

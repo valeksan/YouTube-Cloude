@@ -282,7 +282,6 @@ ScreenManager:
                 id: format_spinner
                 text: 'YTV3 — Resilient (30 FPS, RS + luma)'
                 values: [
-                    'YTV1 — Standard (6 FPS)',
                     'YTV2 — Dense (15 FPS, 21× denser)',
                     'YTV3 — Resilient (30 FPS, RS + luma)',
                 ]
@@ -414,9 +413,7 @@ class YouTubeCloudeApp(App):
     # ── Settings ──────────────────────────────────────────────────────
     def _get_settings(self) -> dict:
         spinner_text = self.root.ids.format_spinner.text
-        if 'YTV1' in spinner_text:
-            fmt = 'ytv1'
-        elif 'YTV3' in spinner_text:
+        if 'YTV3' in spinner_text:
             fmt = 'ytv3'
         else:
             fmt = 'ytv2'

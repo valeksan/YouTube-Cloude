@@ -97,7 +97,7 @@ class YouTubeDecoder:
         """Detect marker size from the top-left corner of the first frame.
 
         Scans the top-left corner for the white marker square.
-        Returns the closest known marker size (80 for YTV1, 16 for YTV2).
+        Returns the closest known marker size (16 for YTV2/YTV3).
         """
         if frame.shape[1] != self.width or frame.shape[0] != self.height:
             frame = resize_frame(frame, self.width, self.height)
@@ -152,7 +152,7 @@ class YouTubeDecoder:
 
     # ── Fast colour lookup ──────────────────────────────────────────────
     def color_to_bits_fast(self, color: np.ndarray) -> str:
-        """Map a BGR colour to its bit string (4-bit YTV1/2, 2-bit YTV3)."""
+        """Map a BGR colour to its bit string (4-bit YTV2, 2-bit YTV3)."""
         color_key = (int(color[0]), int(color[1]), int(color[2]))
 
         if color_key in self.color_cache:
@@ -176,7 +176,7 @@ class YouTubeDecoder:
             self.color_cache[color_key] = result
             return result
 
-        # Quick path for dominant blue (YTV1/2)
+        # Quick path for dominant blue (YTV2)
         if color[0] > 200 and color[1] < 50 and color[2] < 50:
             self.color_cache[color_key] = '0000'
             return '0000'
@@ -287,12 +287,12 @@ class YouTubeDecoder:
                     print(f"  Auto-detected format: {self.format_name}")
                     print(f"  Grid: {self.blocks_x} x {self.blocks_y} blocks")
                 else:
-                    # Can't read first frame → default to YTV1
-                    self._configure_format(get_format('ytv1'))
-                    print("  Warning: cannot read first frame, defaulting to YTV1")
+                    # Can't read first frame → default to YTV2
+                    self._configure_format(get_format('ytv2'))
+                    print("  Warning: cannot read first frame, defaulting to YTV2")
             except Exception as e:
-                self._configure_format(get_format('ytv1'))
-                print(f"  Warning: format detection failed ({e}), defaulting to YTV1")
+                self._configure_format(get_format('ytv2'))
+                print(f"  Warning: format detection failed ({e}), defaulting to YTV2")
 
         all_blocks: list[str] = []
         frames_processed = 0
@@ -449,8 +449,8 @@ class YouTubeDecoder:
             except ValueError:
                 print(f"  Warning: unknown format '{header_format}', using defaults")
         elif not self._format_configured:
-            self._configure_format(get_format('ytv1'))
-            print("  Auto-detected format: YTV1 (legacy header)")
+            self._configure_format(get_format('ytv2'))
+            print("  Auto-detected format: YTV2")
 
         print(f"\n  Header found: {filename}, size: {filesize} bytes")
         print(f"  Header type:  {matched_type}")

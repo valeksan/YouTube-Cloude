@@ -225,10 +225,6 @@ class App(tk.Tk):
         fmt_frame = ttk.Frame(frame)
         fmt_frame.grid(row=1, column=0, sticky='w', padx=8)
         ttk.Radiobutton(
-            fmt_frame, text='YTV1 (6 FPS)',
-            variable=self.format_var, value='ytv1',
-        ).pack(side='left', padx=(0, 12))
-        ttk.Radiobutton(
             fmt_frame, text='YTV2 (15 FPS)',
             variable=self.format_var, value='ytv2',
         ).pack(side='left', padx=(0, 12))

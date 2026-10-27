@@ -6,7 +6,7 @@
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-required-orange)](https://ffmpeg.org/)
-[![License](https://img.shields.io/badge/License-None%20(yet)-red)](#license)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
 [![Tests](https://github.com/valeksan/YouTube-Cloude/actions/workflows/test.yml/badge.svg)](https://github.com/valeksan/YouTube-Cloude/actions/workflows/test.yml)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)]()
 
@@ -344,11 +344,9 @@ PRs welcome — fork, branch, `make setup-dev` + `make test`, push.
 
 ## License
 
-**No license has been set by the original author or any contributor.** This project builds on unlicensed code, which means it is technically "All Rights Reserved" under copyright law.
+This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
 
-If you are the original author ([@KorocheVolgin](https://github.com/KorocheVolgin)) or a contributor and would like to add an open-source license (e.g., MIT), please open an issue or contact me. Adding a license would benefit the entire community.
-
-Until then, please respect the author's rights and use this code for personal/educational purposes only.
+The codebase has been substantially rewritten. Original concept inspired by [@KorocheVolgin](https://github.com/KorocheVolgin)'s YouTube-Cloude.
 
 [^rs]: **Reed-Solomon (RS)** — error-correcting code used in QR codes, CDs and satellite links. `RS(255,223)` means each 255-byte chunk carries 223 data bytes + 32 parity bytes and can fix up to 16 erroneous bytes per chunk. In YTV3 it is applied before 2-bit luma blocking, so a few color shifts or lost blocks after YouTube's `yuv420p` re-encode are automatically repaired — no interlacing needed.
 

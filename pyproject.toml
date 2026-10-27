@@ -7,7 +7,7 @@ name = "youtube-cloude"
 version = "1.1.1"
 description = "Cross-platform app (CLI + Qt/Kivy GUI, Windows/Linux/macOS/Android) to store files in YouTube videos — YTV1/YTV2/YTV3, AES-256-GCM, Reed-Solomon"
 readme = "README.md"
-license = {text = "Proprietary — see README.md"}
+license = {file = "LICENSE"}
 requires-python = ">=3.10"
 authors = [
     {name = "valeksan"},
@@ -24,6 +24,7 @@ classifiers = [
     "Programming Language :: Python :: 3.11",
     "Programming Language :: Python :: 3.12",
     "Operating System :: OS Independent",
+    "License :: OSI Approved :: MIT License",
 ]
 
 dependencies = [

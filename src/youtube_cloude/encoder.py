@@ -32,13 +32,13 @@ class YouTubeEncoder:
     """Encode a file into a video of colour-block frames."""
 
     def __init__(self, key: Optional[str] = None,
-                 format_name: str = 'ytv1',
+                 format_name: str = 'ytv2',
                  interlace: bool = False,
                  max_file_size: Optional[int] = None,
                  compress: bool = False) -> None:
         self.width = WIDTH
         self.height = HEIGHT
-        self.max_file_size = max_file_size or MAX_FILE_SIZES.get(format_name, 100 * 1024 * 1024)
+        self.max_file_size = max_file_size or MAX_FILE_SIZES.get(format_name, 500 * 1024 * 1024)
         self.interlace = interlace
         self.compress = compress
 
@@ -139,7 +139,7 @@ class YouTubeEncoder:
         return True
 
     def bits_to_color(self, bits: str) -> tuple:
-        """Map a bit string to its palette colour (4-bit for YTV1/2, 2-bit for YTV3)."""
+        """Map a bit string to its palette colour (4-bit for YTV2, 2-bit for YTV3)."""
         if self.is_ytv3:
             while len(bits) < 2:
                 bits = '0' + bits

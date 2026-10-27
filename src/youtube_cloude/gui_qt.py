@@ -473,12 +473,12 @@ class EncodePage(QWidget):
         if hasattr(win, 'settings_page'):
             sp = win.settings_page
             return {
-                'format': sp.format_combo.currentData() or 'ytv1',
+                'format': sp.format_combo.currentData() or 'ytv2',
                 'interlace': sp.interlace_check.isChecked(),
                 'compress': sp.compress_check.isChecked(),
                 'key': sp.key_edit.text().strip() or None,
             }
-        return {'format': 'ytv1', 'interlace': False, 'compress': False, 'key': None}
+        return {'format': 'ytv2', 'interlace': False, 'compress': False, 'key': None}
 
     def _start_encode(self) -> None:
         # Toggle: if already running -> cancel
@@ -727,7 +727,6 @@ class SettingsPage(QWidget):
         fmt_group = QGroupBox("Video format")
         fmt_layout = QVBoxLayout(fmt_group)
         self.format_combo = QComboBox()
-        self.format_combo.addItem("YTV1 — Standard (6 FPS, 2852 blocks/frame)", "ytv1")
         self.format_combo.addItem("YTV2 — Dense (15 FPS, 24244 blocks/frame)", "ytv2")
         self.format_combo.addItem("YTV3 — Resilient (30 FPS, RS + luma, yuv420p safe)", "ytv3")
         self.format_combo.setCurrentIndex(2)  # default YTV3

@@ -57,9 +57,9 @@ def add_format_arg(subparser: argparse._SubParsersAction) -> None:  # type: igno
     subparser.add_argument(
         '--format',
         metavar='FMT',
-        choices=['ytv1', 'ytv2', 'ytv3'],
-        default='ytv1',
-        help='Video format: ytv1 (6 FPS), ytv2 (15 FPS, 21x denser), ytv3 (30 FPS, RS + luma, yuv420p safe)',
+        choices=['ytv2', 'ytv3'],
+        default='ytv2',
+        help='Video format: ytv2 (15 FPS, 21x denser), ytv3 (30 FPS, RS + luma, yuv420p safe)',
     )
 
 
@@ -106,7 +106,7 @@ def add_max_size_arg(subparser: argparse._SubParsersAction) -> None:  # type: ig
         metavar='MB',
         type=float,
         default=None,
-         help='Max input file size in MB (default: 100 for YTV1, 500 for YTV2/YTV3)',
+         help='Max input file size in MB (default: 500 for YTV2/YTV3)',
     )
 
 
@@ -120,7 +120,7 @@ def main() -> None:
 commands:
   encode       Encode a file into video
                  --key TEXT | --key-file PATH   encryption
-                 --format ytv1|ytv2|ytv3        video format
+                 --format ytv2|ytv3             video format
                  --interlace                    better YouTube quality (ignored for YTV3)
                  --compress                     zlib compress before encoding
                  --max-size MB                  file size limit
@@ -130,7 +130,7 @@ commands:
 
   decode       Decode a video back to a file
                  --key TEXT | --key-file PATH   decryption
-                 --format ytv1|ytv2|ytv3        force format
+                 --format ytv2|ytv3             force format
                  --interlace                    deinterlace frames
 
 examples:

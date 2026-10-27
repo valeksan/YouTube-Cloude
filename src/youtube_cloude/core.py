@@ -16,17 +16,7 @@ from typing import Optional
 WIDTH: int = 1920
 HEIGHT: int = 1080
 
-# ── YTV1 format (default, backward compatible) ─────────────────────────────
-YTV1: dict = {
-    'name': 'YTV1',
-    'fps': 6,
-    'block_height': 16,
-    'block_width': 24,
-    'spacing': 4,
-    'marker_size': 80,
-}
-
-# ── YTV2 format (125x denser, from @sosatel30000) ──────────────────────────
+# ── YTV2 format ─────────────────────────────────────────────────────────────
 YTV2: dict = {
     'name': 'YTV2',
     'fps': 15,
@@ -51,14 +41,13 @@ YTV3: dict = {
 
 # ── All known formats ───────────────────────────────────────────────────────
 FORMATS: dict[str, dict] = {
-    'ytv1': YTV1,
     'ytv2': YTV2,
     'ytv3': YTV3,
 }
 
 
-def get_format(name: str = 'ytv1') -> dict:
-    """Return format parameters by name ('ytv1' | 'ytv2')."""
+def get_format(name: str = 'ytv2') -> dict:
+    """Return format parameters by name ('ytv2' | 'ytv3')."""
     key = name.lower().strip()
     if key not in FORMATS:
         raise ValueError(f"Unknown format: {name!r}. Choose from: {list(FORMATS)}")
@@ -78,7 +67,7 @@ def compute_grid(fmt: dict) -> dict:
     bx = (WIDTH - 2 * ms) // (bw + sp)
     by = (HEIGHT - 2 * ms) // (bh + sp)
     bpr = bx * by
-    # YTV3 uses single region + RS; YTV1/YTV2 use 3x replication
+    # YTV3 uses single region + RS; YTV2 uses 3x replication
     bpf = bpr if fmt.get('name') == 'YTV3' else bpr * 3
     return {
         'name': fmt['name'],
@@ -97,7 +86,7 @@ def compute_grid(fmt: dict) -> dict:
 def detect_format(marker_size: int) -> dict:
     """Auto-detect format from marker size observed in the first frame.
 
-    YTV1 markers are 80px, YTV2/YTV3 are 16px (disambiguated by palette).
+    YTV2/YTV3 markers are 16px (disambiguated by palette).
     """
     for fmt in FORMATS.values():
         if fmt['marker_size'] == marker_size:
@@ -107,8 +96,8 @@ def detect_format(marker_size: int) -> dict:
             if marker_size == 16:
                 return YTV2
             return fmt
-    # Fallback: small marker → YTV2, large → YTV1
-    return YTV2 if marker_size < 40 else YTV1
+    # Fallback: default to YTV2
+    return YTV2
 
 
 def detect_format_by_palette(frame) -> dict:
@@ -203,13 +192,12 @@ DANGEROUS_EXTENSIONS: set[str] = {
 }
 
 # ── Max file size defaults (based on format density) ────────────────────────
-# YTV1: 100 MB → ~3.4h video. YTV2: 500 MB → ~48 min video. YTV3: 500 MB.
+# YTV2: 500 MB → ~48 min video. YTV3: 500 MB.
 MAX_FILE_SIZES: dict[str, int] = {
-    'ytv1': 100 * 1024 * 1024,   # 100 MB
     'ytv2': 500 * 1024 * 1024,   # 500 MB
     'ytv3': 500 * 1024 * 1024,   # 500 MB (single region + RS overhead ~13%)
 }
-MAX_FILE_SIZE: int = 100 * 1024 * 1024  # fallback for direct callers
+MAX_FILE_SIZE: int = 500 * 1024 * 1024  # fallback for direct callers
 
 
 # ── AES-GCM encryption (PBKDF2) ────────────────────────────────────────────
