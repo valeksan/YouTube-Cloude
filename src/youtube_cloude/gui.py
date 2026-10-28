@@ -265,7 +265,7 @@ class App(tk.Tk):
         ).grid(row=5, column=1, padx=8)
 
         info = (
-            "Key: PBKDF2-HMAC-SHA256 + AES-256-GCM (legacy CBC still decodes).\n"
+            "Key: PBKDF2-HMAC-SHA256 + AES-256-GCM.\n"
             "Leave blank to disable encryption.\n\n"
             "Credits:\n"
             "  @Hinderchik  - original concept\n"

@@ -192,7 +192,7 @@ class YouTubeEncoder:
                 print(f"  Compress skipped (would enlarge: {len(compressed)} >= {orig_size})")
 
         if self.use_encryption:
-            # New: PBKDF2 + AES-GCM (authenticated). Legacy CBC kept for decoding.
+            # PBKDF2 + AES-GCM (authenticated).
             from .core import (
                 generate_salt, generate_nonce, derive_key_pbkdf2,
                 encrypt_data_gcm, PBKDF2_ITERATIONS,

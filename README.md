@@ -6,11 +6,11 @@
 
 [![Python 3.10+](https://img.shields.io/badge/Python-3.10%2B-3776AB?logo=python&logoColor=white)](https://www.python.org/)
 [![FFmpeg](https://img.shields.io/badge/FFmpeg-required-orange)](https://ffmpeg.org/)
-[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+[![License review: pending](https://img.shields.io/badge/License_review-pending-yellow.svg)](docs/LICENSING_AUDIT.md)
 [![Tests](https://github.com/valeksan/YouTube-Cloude/actions/workflows/test.yml/badge.svg)](https://github.com/valeksan/YouTube-Cloude/actions/workflows/test.yml)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)]()
 
-*Cross-platform app (CLI + Qt/Kivy GUI, Windows/Linux/macOS/Android) to hide any file in a YouTube video and restore it later — YTV1/YTV2/YTV3 (Reed-Solomon), AES-256-GCM, bundled ffmpeg.*
+*Cross-platform app (CLI + Qt/Kivy GUI, Windows/Linux/macOS/Android) to hide any file in a YouTube video and restore it later — YTV2/YTV3 (Reed-Solomon), AES-256-GCM. FFmpeg is installed separately.*
 
 </div>
 
@@ -44,10 +44,10 @@ This project is an **educational and research tool** for steganography vs lossy 
 
 ## Features
 
-- 🔐 **AES-256-GCM encryption** — PBKDF2-HMAC-SHA256 (200k iters) + random salt/nonce/tag, legacy CBC still decodes
-- 🎞️ **Three formats** — YTV1 (standard), YTV2 (21× denser), **YTV3** (30 FPS, RS + luma, yuv420p-resilient)
+- 🔐 **AES-256-GCM encryption** — PBKDF2-HMAC-SHA256 (200k iters) + random salt/nonce/tag
+- 🎞️ **Two formats** — YTV2 (15 FPS), **YTV3** (30 FPS, RS + luma, yuv420p-resilient)
 - 📊 **Reed-Solomon[^rs] + CRC32** — RS(255,223) corrects 16 byte errors/chunk (YTV3) + CRC32 on all formats
-- 🔀 **Interlacing[^il]** — improved YouTube retention (YTV1/YTV2, ignored for YTV3)
+- 🔀 **Interlacing[^il]** — improved YouTube retention (YTV2, ignored for YTV3)
 - 🗜️ **zlib compression** — `--compress` before encoding, auto-skipped if would enlarge
 - 🖥️ **GUI** — PySide6 (Qt) primary, unified `gui_service` layer; Tkinter deprecated, Kivy for Android
 - 📱 **Android** — Buildozer APK (arm64, API 33), Kivy GUI
@@ -68,21 +68,22 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 
-# Required: FFmpeg (install separately, not included in pip)
+# Required: FFmpeg and ffprobe (install separately for pip and new desktop builds)
 sudo apt install ffmpeg    # Linux
 brew install ffmpeg        # macOS
+# Windows: install FFmpeg, add its bin directory to PATH, or select paths in Settings
 ```
 
 ### Encode a File
 
 ```bash
-# Basic encoding (YTV1 format)
+# Basic encoding (default: YTV2 format)
 youtube-cloude encode secret.zip video.mp4
 
 # With encryption (PBKDF2 + AES-GCM)
 youtube-cloude encode secret.zip video.mp4 --key "my-password"
 
-# YTV2 format (21× denser, 15 FPS)
+# YTV2 format (15 FPS)
 youtube-cloude encode secret.zip video.mp4 --format ytv2
 
 # YTV3 format (30 FPS, RS + grayscale luma — best for YouTube, no interlace needed)
@@ -94,10 +95,10 @@ youtube-cloude encode secret.zip video.mp4 --compress
 # YTV3 + GCM + compress (recommended for text/logs)
 youtube-cloude encode secret.zip video.mp4 --format ytv3 --key "my-password" --compress
 
-# With interlacing (YTV1/YTV2 only, better YouTube quality)
+# With interlacing (YTV2 only, better YouTube quality)
 youtube-cloude encode secret.zip video.mp4 --interlace
 
-# Override max file size (default: 100 MB YTV1, 500 MB YTV2/YTV3)
+# Override max file size (default: 500 MB for YTV2/YTV3)
 youtube-cloude encode big.iso video.mp4 --max-size 200
 
 # Or via Makefile
@@ -110,7 +111,7 @@ make run CMD="encode secret.zip video.mp4"
 # Auto-detects format, interlacing, RS, compression and CRC from the video
 youtube-cloude decode video.mp4
 
-# With decryption key (PBKDF2 + GCM, legacy CBC also supported)
+# With decryption key (PBKDF2 + GCM)
 youtube-cloude decode video.mp4 --key "my-password"
 ```
 
@@ -169,6 +170,9 @@ make test-fast      # stop on first failure
 
 ## Format Comparison
 
+YTV2 and YTV3 are supported. YTV1 and AES-CBC decoding have been removed.
+The YTV1 column below is a historical reference, not an available mode.
+
 | Property | YTV1 | YTV2 | **YTV3** |
 |----------|------|------|----------|
 | Block size | 24×16 px | 8×8 px | 8×8 px |
@@ -185,6 +189,9 @@ make test-fast      # stop on first failure
 | Max file (override) | `--max-size 200` | `--max-size 200` | `--max-size 200` |
 
 ## Benchmark
+
+Historical measurements from before YTV1 removal; these are not fresh results
+for the current tree.
 
 **Test system (2026-08-31):** AMD Ryzen 3 PRO 4350G (4C/8T, 3.8 GHz), 28 GB RAM, Windows 11, Python 3.13, FFmpeg N-111283, `benchmark_input.png` 550 KB (800×600 geometric + 80k noise pixels). All variants verified with MD5 — **12/12 passed**.
 
@@ -302,7 +309,7 @@ youtube-cloude encode file.zip video.mp4
 youtube-cloude decode video.mp4   # key.txt auto-detected
 ```
 
-> ℹ️ New files use `SALT:NONCE:TAG` (GCM); old `IV` (CBC) files auto-fallback. Wrong key fails with `MAC check failed`.
+> ℹ️ Encrypted files use `SALT:NONCE:TAG` (GCM). Old `IV` (CBC) files are no longer supported. Wrong keys fail authentication.
 
 ## Compression
 
@@ -344,9 +351,15 @@ PRs welcome — fork, branch, `make setup-dev` + `make test`, push.
 
 ## License
 
-This project is licensed under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+The maintainer's own contributions are offered under the [MIT License](LICENSE).
+The project descends from [@KorocheVolgin](https://github.com/KorocheVolgin)'s
+implementation, and the rights review for retained inherited code is still open.
+See [the audit and release checklist](docs/LICENSING_AUDIT.md).
 
-The codebase has been substantially rewritten. Original concept inspired by [@KorocheVolgin](https://github.com/KorocheVolgin)'s YouTube-Cloude.
+Dependencies and the Android recipe sources retain their own licenses; see
+[THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). New desktop builds require
+a separately installed FFmpeg/ffprobe. Earlier release assets have a different
+composition and are covered separately in the audit.
 
 [^rs]: **Reed-Solomon (RS)** — error-correcting code used in QR codes, CDs and satellite links. `RS(255,223)` means each 255-byte chunk carries 223 data bytes + 32 parity bytes and can fix up to 16 erroneous bytes per chunk. In YTV3 it is applied before 2-bit luma blocking, so a few color shifts or lost blocks after YouTube's `yuv420p` re-encode are automatically repaired — no interlacing needed.
 

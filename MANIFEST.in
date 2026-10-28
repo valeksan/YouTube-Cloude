@@ -1,0 +1,5 @@
+include LICENSE THIRD_PARTY_NOTICES.md CONTRIBUTORS.md
+include docs/LICENSING_AUDIT.md
+include recipes/LICENSE
+recursive-include recipes *.py *.patch
+include scripts/collect_licenses.py
