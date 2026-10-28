@@ -88,7 +88,7 @@ def collect(output: Path, required: list[str]) -> dict:
 
     output.mkdir(parents=True, exist_ok=True)
     for relative in ["LICENSE", "THIRD_PARTY_NOTICES.md", "CONTRIBUTORS.md",
-                     "recipes/LICENSE", "docs/LICENSING_AUDIT.md"]:
+                     "recipes/LICENSE", "docs/LICENSING_AUDIT.md", "docs/QT_RELEASE_REVIEW.md"]:
         target = output / "project" / relative
         target.parent.mkdir(parents=True, exist_ok=True)
         shutil.copyfile(PROJECT_ROOT / relative, target)

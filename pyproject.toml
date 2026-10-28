@@ -62,7 +62,7 @@ youtube-cloude-gui-kivy = "youtube_cloude.gui_kivy:main"
 where = ["src"]
 
 [tool.setuptools]
-license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "recipes/LICENSE", "CONTRIBUTORS.md", "docs/LICENSING_AUDIT.md"]
+license-files = ["LICENSE", "THIRD_PARTY_NOTICES.md", "recipes/LICENSE", "CONTRIBUTORS.md", "docs/LICENSING_AUDIT.md", "docs/QT_RELEASE_REVIEW.md"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

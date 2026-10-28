@@ -91,6 +91,10 @@ this change had no recorded license texts; the new release check rejects
 that environment before compilation. Supplying reviewed, version-matched
 notices and fulfilling source/relinking obligations remains release work.
 Do not bypass the check by removing Qt from `--require`.
+Evidence from the later release run and a platform-specific Qt review plan are
+recorded in [QT_RELEASE_REVIEW.md](QT_RELEASE_REVIEW.md). The Windows check
+passing does not by itself establish completeness or replacement/relinking
+compliance.
 
 README and package metadata now qualify MIT as applying to the maintainer's
 own contributions and explicitly mark the inherited-code review as pending.

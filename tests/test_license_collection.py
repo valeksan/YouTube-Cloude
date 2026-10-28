@@ -47,6 +47,7 @@ def test_preserves_nested_notices_and_versions(tmp_path, monkeypatch):
         assert hashlib.sha256(data).hexdigest() == notice["sha256"]
     assert json.loads((output / "build-environment.json").read_text()) == report
     assert (output / "project/recipes/LICENSE").is_file()
+    assert (output / "project/docs/QT_RELEASE_REVIEW.md").is_file()
 
 
 @pytest.mark.parametrize("files", [[], ["example.dist-info/LICENSE"]])
