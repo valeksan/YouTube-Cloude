@@ -55,7 +55,7 @@ uploaded artifact private.
   every native library shipped by a wheel. Identify the exact source and build
   configuration for each actual binary, including any downstream changes.
 
-## Windows wheel identifiers and source reference
+## Wheel identifiers and source reference
 
 The run's Windows install log names the following wheels. The hashes below
 are published by the PyPI JSON API for those exact filenames, retrieved on
@@ -72,6 +72,24 @@ download and verify the files itself before claiming reproducibility.
 | `pyside6_pdf-6.12.0.140-cp310-abi3-win_amd64.whl` | `4971ba1a0ca15e7c29cfd808e9600aeb46b2305dad01456eb09fa3197166268e` |
 | `pyside6_webengine-6.12.0.140-cp310-abi3-win_amd64.whl` | `f9b61b1d457a591ee590a6b80515f25a3e61e2576a2a0a70566380f9d9de4ab0` |
 | `shiboken6-6.12.0-cp310-abi3-win_amd64.whl` | `a1906cb8116869178c64b6bab52623bbc8b4ceed7b30bfc3c9aa0f6e67f6438e` |
+
+The Linux and macOS logs name the following additional wheels; the same
+qualification about published versus actually verified hashes applies:
+
+| Wheel filename | PyPI SHA-256 |
+| --- | --- |
+| `pyside6-6.12.0-cp310-abi3-macosx_14_0_universal2.whl` | `efea4c2f2aa54403c45de825865a902a1960a1cc9d5aaa92d4ebb8f4c4cd0708` |
+| `pyside6-6.12.0-cp310-abi3-manylinux_2_34_x86_64.whl` | `d13ed4d0053cc20f3e4e0fdbf12790a9b7f958d7e22c0843411ecfa8c799e2a9` |
+| `pyside6_essentials-6.12.0-cp310-abi3-macosx_14_0_universal2.whl` | `0867b709a724db28b161227c7d6ecb5ed10cc09226a53542417ac6dee1308239` |
+| `pyside6_essentials-6.12.0-cp310-abi3-manylinux_2_34_x86_64.whl` | `16f4b5e41daf49235ae048458243da9efe5f3d8040f9cc5aa454ce69893d3bd9` |
+| `pyside6_addons-6.12.0-cp310-abi3-macosx_14_0_universal2.whl` | `1d9bcd294ce1c9829194c7d13b01f771a2254b86cb3462cc3399321d2797fdac` |
+| `pyside6_addons-6.12.0-cp310-abi3-manylinux_2_34_x86_64.whl` | `4ab38c0017f0453671a9313d3a53ca1c0e378924f54b07e596bcea94a9642391` |
+| `pyside6_pdf-6.12.0.140-cp310-abi3-macosx_14_0_universal2.whl` | `74287989dd24a82ac1604e27a2d4530a0ab71ff03cdf878c16fdbcf5144373fb` |
+| `pyside6_pdf-6.12.0.140-cp310-abi3-manylinux_2_34_x86_64.whl` | `0c94370b6b9d65fbfe54f9d6d25df0677db0cdcfd0a842a63958a3603a42007c` |
+| `pyside6_webengine-6.12.0.140-cp310-abi3-macosx_14_0_universal2.whl` | `9a1de2da360d1817c08e9400a2a2fc5234beb3022a22123e15355169e183074e` |
+| `pyside6_webengine-6.12.0.140-cp310-abi3-manylinux_2_34_x86_64.whl` | `c041c9921d7c91c9e51a2c027f434d05c3c59baa2c8f17b71dc8194e77791f06` |
+| `shiboken6-6.12.0-cp310-abi3-macosx_14_0_universal2.whl` | `47105e05baf57d35453e07d240bbe59cb4b8d9565377ea5134ff9fb37d4f5c02` |
+| `shiboken6-6.12.0-cp310-abi3-manylinux_2_34_x86_64.whl` | `3bde565bb0890044b5c7f63808adddede5abc241e9395a2bfed61919884d6240` |
 
 The upstream `pyside-setup` annotated tag `v6.12.0` resolves to commit
 `f50facb83fc3dc5f3240c854668c7a6dd93871b2` (checked with `git ls-remote`
