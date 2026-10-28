@@ -100,6 +100,19 @@ native components, remain open. The `6.12.0.140` wheels require their own
 source/build provenance; do not assume their contents are covered solely by
 the PySide tag.
 
+Candidate upstream Qt sources for modules named in the Windows compilation
+report (resolved from the annotated `v6.12.0` tags on 2026-10-28):
+
+| Repository | Peeled tag commit | Example reported binaries |
+| --- | --- | --- |
+| `https://code.qt.io/qt/qtbase.git` | `025bdad181de241e81bf853c8a2d7bf3d19261a9` | Qt6Core, Qt6Gui, Qt6Network, Qt6Widgets |
+| `https://code.qt.io/qt/qtsvg.git` | `883a58532078d003cefef0a549bfe9f885ce41f5` | Qt6Svg and SVG plugins |
+
+These source references are candidates, not evidence of the precise sources,
+patches or build configuration used for a given wheel. In particular, the
+report also lists Qt6Pdf and PDF/image plugins, whose provenance and
+third-party notices still need separate review.
+
 ## Before enabling release publication
 
 1. Pin and record exact dependency versions, platform wheel filenames and
