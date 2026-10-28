@@ -55,6 +55,33 @@ uploaded artifact private.
   every native library shipped by a wheel. Identify the exact source and build
   configuration for each actual binary, including any downstream changes.
 
+## Windows wheel identifiers and source reference
+
+The run's Windows install log names the following wheels. The hashes below
+are published by the PyPI JSON API for those exact filenames, retrieved on
+2026-10-28. The workflow did not save its downloaded wheel bytes or verify
+these hashes, so this table is an identification aid, **not proof of the
+hashes of the wheels actually installed in that run**. A future build must
+download and verify the files itself before claiming reproducibility.
+
+| Wheel filename | PyPI SHA-256 |
+| --- | --- |
+| `pyside6-6.12.0-cp310-abi3-win_amd64.whl` | `31a8d2893f2f28ab483b1534dde0438f27af6e234593de30425cb4729052d8f8` |
+| `pyside6_essentials-6.12.0-cp310-abi3-win_amd64.whl` | `c9a95102aa23c1f86516a30d5a9be37552d324eee7e567eb7508973f1218cb42` |
+| `pyside6_addons-6.12.0-cp310-abi3-win_amd64.whl` | `98d8d62010da6605344cee83e5c96fb846170a1f2d924523f10f5d92078b02b0` |
+| `pyside6_pdf-6.12.0.140-cp310-abi3-win_amd64.whl` | `4971ba1a0ca15e7c29cfd808e9600aeb46b2305dad01456eb09fa3197166268e` |
+| `pyside6_webengine-6.12.0.140-cp310-abi3-win_amd64.whl` | `f9b61b1d457a591ee590a6b80515f25a3e61e2576a2a0a70566380f9d9de4ab0` |
+| `shiboken6-6.12.0-cp310-abi3-win_amd64.whl` | `a1906cb8116869178c64b6bab52623bbc8b4ceed7b30bfc3c9aa0f6e67f6438e` |
+
+The upstream `pyside-setup` annotated tag `v6.12.0` resolves to commit
+`f50facb83fc3dc5f3240c854668c7a6dd93871b2` (checked with `git ls-remote`
+against `https://code.qt.io/pyside/pyside-setup.git`). The tagged source is a
+candidate reference; matching it to the distributor's actual wheel build,
+and obtaining the source and licenses of included Qt libraries and other
+native components, remain open. The `6.12.0.140` wheels require their own
+source/build provenance; do not assume their contents are covered solely by
+the PySide tag.
+
 ## Before enabling release publication
 
 1. Pin and record exact dependency versions, platform wheel filenames and
