@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+- Release workflow no longer builds or publishes Android APKs. The current design needs an FFmpeg binary the APK cannot legally/technically assume; re-enabling requires a reviewed GPL-compliant bundle or an LGPL build with a non-GPL H.264 encoder.
+- Desktop releases no longer bundle FFmpeg/ffprobe; install them separately or select paths in Settings.
+
 ## [1.1.1] - 2026-09-01
 
 ### Added

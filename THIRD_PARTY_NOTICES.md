@@ -46,9 +46,11 @@ actual libraries/modules shipped. They must also satisfy the applicable
 source and replacement/relinking requirements. The collector alone does not
 establish LGPL compliance, and no commercial Qt entitlement is assumed.
 
-Android uses target packages built by python-for-android. The host Python
-inventory must not be presented as an APK inventory. Its target Python/native
-license and source review remains open.
+Android release builds are disabled while the licensing and codec route is
+reviewed; no APK is produced by the release workflow. The retained Kivy UI and
+python-for-android recipes keep their own notices above. If Android builds are
+re-enabled, target Python/native packages need their own inventory, license and
+source review; the host Python inventory must not be presented as an APK one.
 
 ## External programs
 

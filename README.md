@@ -10,7 +10,7 @@
 [![Tests](https://github.com/valeksan/YouTube-Cloude/actions/workflows/test.yml/badge.svg)](https://github.com/valeksan/YouTube-Cloude/actions/workflows/test.yml)
 [![Platform](https://img.shields.io/badge/Platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey)]()
 
-*Cross-platform app (CLI + Qt/Kivy GUI, Windows/Linux/macOS/Android) to hide any file in a YouTube video and restore it later — YTV2/YTV3 (Reed-Solomon), AES-256-GCM. FFmpeg is installed separately.*
+*Cross-platform app (CLI + Qt GUI, Windows/Linux/macOS) to hide any file in a YouTube video and restore it later — YTV2/YTV3 (Reed-Solomon), AES-256-GCM. FFmpeg is installed separately. Android builds are paused pending licensing review.*
 
 </div>
 
@@ -49,8 +49,8 @@ This project is an **educational and research tool** for steganography vs lossy 
 - 📊 **Reed-Solomon[^rs] + CRC32** — RS(255,223) corrects 16 byte errors/chunk (YTV3) + CRC32 on all formats
 - 🔀 **Interlacing[^il]** — improved YouTube retention (YTV2, ignored for YTV3)
 - 🗜️ **zlib compression** — `--compress` before encoding, auto-skipped if would enlarge
-- 🖥️ **GUI** — PySide6 (Qt) primary, unified `gui_service` layer; Tkinter deprecated, Kivy for Android
-- 📱 **Android** — Buildozer APK (arm64, API 33), Kivy GUI
+- 🖥️ **GUI** — PySide6 (Qt) primary, unified `gui_service` layer; Tkinter deprecated, Kivy UI retained for Android
+- 📱 **Android** — Kivy/Buildozer source retained, but APK releases are disabled pending the licensing and codec review; the current design needs FFmpeg, which cannot be assumed on Android
 - 📦 **Batch mode** — encode entire directories at once
 - 📤 **YouTube upload/download** — via yt-dlp and YouTube Data API v3 (planned)
 
@@ -356,10 +356,11 @@ The project descends from [@KorocheVolgin](https://github.com/KorocheVolgin)'s
 implementation, and the rights review for retained inherited code is still open.
 See [the audit and release checklist](docs/LICENSING_AUDIT.md).
 
-Dependencies and the Android recipe sources retain their own licenses; see
+Dependencies and the retained Android recipe sources keep their own licenses; see
 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md). New desktop builds require
-a separately installed FFmpeg/ffprobe. Earlier release assets have a different
-composition and are covered separately in the audit.
+a separately installed FFmpeg/ffprobe. Android release builds are disabled
+until the licensing/codec route is resolved. Earlier release assets have a
+different composition and are covered separately in the audit.
 
 [^rs]: **Reed-Solomon (RS)** — error-correcting code used in QR codes, CDs and satellite links. `RS(255,223)` means each 255-byte chunk carries 223 data bytes + 32 parity bytes and can fix up to 16 erroneous bytes per chunk. In YTV3 it is applied before 2-bit luma blocking, so a few color shifts or lost blocks after YouTube's `yuv420p` re-encode are automatically repaired — no interlacing needed.
 

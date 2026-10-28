@@ -97,9 +97,15 @@ own contributions and explicitly mark the inherited-code review as pending.
 The existing MIT grant is preserved; no new license or permission from
 upstream authors is inferred.
 
-Android stages the repository notices under `legal/project/` in the app
-sources and uploads a separate repository-notice ZIP. This does not complete
-the target dependency inventory or source obligations.
+Android release builds are disabled in this change. The Kivy UI and recipes
+remain in the tree, but the release workflow no longer builds or publishes an
+APK. The current implementation depends on `ffmpeg`/`ffprobe` subprocesses and
+hardcodes the GPL `libx264` encoder; Android has no system FFmpeg and the Kivy
+UI has no path override, so an APK without a bundled codec cannot perform
+encode/decode. Re-enabling Android requires either a reviewed GPL-compliant
+bundle (complete corresponding source and notices) or an LGPL FFmpeg build with
+a non-GPL H.264 encoder such as MediaCodec, plus a target native-library
+inventory. Until then there is nothing to stage into an APK release.
 
 ## Release checklist
 
@@ -108,8 +114,9 @@ the target dependency inventory or source obligations.
 - [ ] Record exact Qt/PySide/Shiboken versions/modules, corresponding sources,
   and verify the applicable LGPL replacement/relinking route, including Windows
   onefile packaging; or document valid alternative licensing.
-- [ ] Inventory APK target Python/native libraries, preserve their complete
-  notices and fulfill applicable source obligations. Host metadata is insufficient.
+- [ ] If Android is re-enabled: inventory APK target Python/native libraries,
+  preserve their complete notices, resolve the FFmpeg/libx264 licensing route,
+  and fulfill applicable source obligations. Host metadata is insufficient.
 - [ ] Inspect old release assets and prepare corrections/source delivery for
   previously bundled FFmpeg and other components as required.
 - [ ] Rebuild and inspect each final artifact before publishing a new release.
