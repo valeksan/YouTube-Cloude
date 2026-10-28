@@ -91,6 +91,12 @@ this change had no recorded license texts; the new release check rejects
 that environment before compilation. Supplying reviewed, version-matched
 notices and fulfilling source/relinking obligations remains release work.
 Do not bypass the check by removing Qt from `--require`.
+The GUI dependency has since been narrowed to PySide6-Essentials, which
+provides the QtCore, QtGui and QtWidgets imports used by the application.
+The release workflow no longer requests the separate Addons distribution and
+does not require its notices unless it is reintroduced; Essentials and
+shiboken6 remain required. This change does not resolve their missing notices
+or replace a review of the final native libraries and plugins.
 Evidence from the later release run and a platform-specific Qt review plan are
 recorded in [QT_RELEASE_REVIEW.md](QT_RELEASE_REVIEW.md). The Windows check
 passing does not by itself establish completeness or replacement/relinking
