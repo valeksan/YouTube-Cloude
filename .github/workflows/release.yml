@@ -252,130 +252,11 @@ jobs:
           path: dist/
           retention-days: 7
 
-  # ── Android: Kivy GUI (Buildozer) ─────────────────────────────────────
-  build-android:
-    needs: test
-    runs-on: ubuntu-latest
-    env:
-      ACLOCAL_PATH: /usr/share/aclocal:/usr/lib/x86_64-linux-gnu/aclocal
-      # p4a (via buildozer) creates a python3.14 venv and runs `pip install -U pip`,
-      # which installs the latest pip (26.2.x) where the pip._internal.exceptions
-      # BuildDependencyInstallError class was removed -> the build dies with
-      # "ImportError: cannot import name 'BuildDependencyInstallError'".
-      # Pin pip < 26.2 so the venv keeps a pip that still has that class.
-      PIP_CONSTRAINT: ${{ github.workspace }}/pip-constraints.txt
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Pin pip version for p4a venv
-        shell: bash
-        run: |
-          printf 'pip<26.2\n' > "${{ github.workspace }}/pip-constraints.txt"
-          cat "${{ github.workspace }}/pip-constraints.txt"
-
-      - uses: actions/setup-python@v5
-        with:
-          python-version: ${{ env.PYTHON_VERSION }}
-
-      - name: Set up JDK 17
-        uses: actions/setup-java@v4
-        with:
-          distribution: temurin
-          java-version: '17'
-
-      - name: Install system dependencies
-        shell: bash
-        run: |
-          sudo apt-get update -qq
-          sudo apt-get install -y -qq \
-            autoconf automake libtool libtool-bin libltdl-dev \
-            pkg-config \
-            zlib1g-dev libncurses-dev \
-            cmake libffi-dev libssl-dev \
-            unzip wget \
-            lld clang
-          # Verify: LT_SYS_SYMBOL_USCORE macro is now available
-          grep -q "LT_SYS_SYMBOL_USCORE" /usr/share/aclocal/ltdl.m4 && \
-            echo "OK: LT_SYS_SYMBOL_USCORE found in ltdl.m4" || \
-            echo "WARNING: LT_SYS_SYMBOL_USCORE not found"
-
-      - name: Install Buildozer + Kivy
-        shell: bash
-        run: pip install buildozer==1.5.0 cython==0.29.36 kivy==2.3.0
-
-      - name: Stage repository license notices for Android
-        shell: bash
-        run: |
-          mkdir -p src/legal/project/recipes src/legal/project/docs
-          cp LICENSE THIRD_PARTY_NOTICES.md CONTRIBUTORS.md src/legal/project/
-          cp recipes/LICENSE src/legal/project/recipes/
-          cp docs/LICENSING_AUDIT.md src/legal/project/docs/
-          # These are repository notices, not a host-derived APK inventory.
-
-      - name: Create buildozer.spec
-        shell: bash
-        run: |
-          TAG="${{ inputs.version }}"
-          # p4a requires a purely numeric version (it does int() on each
-          # dot-separated part), so strip a leading 'v' and any '-suffix'.
-          ANDROID_VERSION="${TAG#v}"
-          ANDROID_VERSION="${ANDROID_VERSION%%-*}"
-          cat > buildozer.spec << 'SPEC'
-          [app]
-          title = YouTube-Cloude
-          package.name = youtube_cloude
-          package.domain = com.valeksan
-          source.dir = src
-          source.include_exts = py,png,jpg,kv,atlas,md,txt,json
-          source.main = youtube_cloude.gui_kivy:main
-          version = ANDROIDVERSIONPLACEHOLDER
-          requirements = python3,kivy,numpy,pillow,pycryptodome,reedsolo,requests==2.25.1
-          orientation = portrait
-          fullscreen = 0
-          android.permissions = CAMERA,INTERNET,READ_EXTERNAL_STORAGE,WRITE_EXTERNAL_STORAGE
-          android.api = 33
-          android.minapi = 24
-          android.ndk = 27b
-          android.archs = arm64-v8a
-          android.accept_sdk_license = True
-          p4a.branch = master
-          p4a.local_recipes = recipes
-          SPEC
-          sed -i "s/ANDROIDVERSIONPLACEHOLDER/${ANDROID_VERSION}/" buildozer.spec
-          echo "Android version: ${ANDROID_VERSION}"
-
-      - name: Build Android APK
-        shell: bash
-        run: |
-          EXIT=0
-          for i in 1 2 3; do
-            buildozer android debug && { EXIT=0; break; } || EXIT=$?
-            echo "Buildozer attempt $i failed (exit $EXIT), retrying in $((i*30))s..." >&2
-            sleep $((i*30))
-          done
-          exit $EXIT
-        timeout-minutes: 120
-
-      - name: Package Android repository notices
-        shell: bash
-        run: |
-          python -m zipfile -c "bin/licensing-${{ inputs.version }}-android.zip" src/legal
-
-      - name: Upload Android APK
-        uses: actions/upload-artifact@v4
-        if: always()
-        with:
-          name: binaries-android
-          path: |
-            bin/*.apk
-            bin/licensing-*-android.zip
-          retention-days: 7
-
   # ── Release ─────────────────────────────────────────────────────────────
   release:
-    needs: [build-desktop, build-android]
+    needs: [build-desktop]
     runs-on: ubuntu-latest
-    if: ${{ needs.build-desktop.result == 'success' && needs.build-android.result == 'success' && !inputs.dry_run }}
+    if: ${{ needs.build-desktop.result == 'success' && !inputs.dry_run }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -418,16 +299,12 @@ jobs:
             | **Windows** (amd64) | `youtube-cloude-*-windows-amd64.exe` | `youtube-cloude-gui-*-windows-amd64.exe` |
             | **macOS** (arm64) | `youtube-cloude-*-macos-arm64.dmg` | `youtube-cloude-gui-*-macos-arm64.dmg` |
 
-            **Android** — native APK (Kivy + Buildozer):
-            | Platform | APK |
-            |----------|-----|
-            | **Android** (arm64) | `youtube_cloude-*.apk` |
-
             ### Licensing and external tools
             - This is a draft pending the review in `docs/LICENSING_AUDIT.md`.
             - Install FFmpeg and ffprobe separately, then add them to PATH or select their paths in Settings.
             - Desktop license texts and build-environment inventories are included under `legal/` and in `licensing-*.zip`.
-            - These inventories do not replace the outstanding native-library, Qt and Android target review.
+            - These inventories do not replace the outstanding native-library and Qt review.
+            - Android builds are not published: see the Android section of the audit.
 
             ### Desktop CLI
             ```bash
@@ -441,13 +318,12 @@ jobs:
             - **macOS**: open `youtube-cloude-gui-*.dmg`
 
             ### Android
-            - Install APK → grant permissions → use GUI
-            - Or via Termux: `pkg install python ffmpeg && pip install youtube-cloude`
+            - Release builds are disabled pending the licensing and codec review in `docs/LICENSING_AUDIT.md`.
+            - Via Termux you can still install the Python package manually: `pkg install python ffmpeg && pip install youtube-cloude`
 
             ### Build Info
             - **Desktop builds**: Nuitka
             - **Desktop GUI**: PySide6 via Nuitka pyside6 plugin
-            - **Android**: Kivy GUI via Buildozer (native APK)
           files: artifacts/**/*
           # Keep releases in draft while docs/LICENSING_AUDIT.md remains open.
           draft: true
