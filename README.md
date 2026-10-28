@@ -50,6 +50,7 @@ This project is an **educational and research tool** for steganography vs lossy 
 - 🔀 **Interlacing[^il]** — improved YouTube retention (YTV2, ignored for YTV3)
 - 🗜️ **zlib compression** — `--compress` before encoding, auto-skipped if would enlarge
 - 🖥️ **GUI** — PySide6 (Qt) primary, unified `gui_service` layer; Tkinter deprecated, Kivy UI retained for Android
+- 📦 **Qt dependencies** — the GUI installs PySide6-Essentials, not the full PySide6 meta-package; actual bundled native libraries still require review
 - 📱 **Android** — Kivy/Buildozer source retained, but APK releases are disabled pending the licensing and codec review; the current design needs FFmpeg, which cannot be assumed on Android
 - 📦 **Batch mode** — encode entire directories at once
 - 📤 **YouTube upload/download** — via yt-dlp and YouTube Data API v3 (planned)

@@ -94,14 +94,14 @@ jobs:
 
       - name: Install dependencies
         shell: bash
-        run: pip install -e ".[dev,gui]" nuitka ordered-set "PySide6>=6.5"
+        run: pip install -e ".[dev,gui]" nuitka ordered-set
 
       # FFmpeg/ffprobe remain external until a reviewed binary/source bundle exists.
       - name: Collect Python license files and build inventory
         shell: bash
         run: |
           python scripts/collect_licenses.py --output release-legal \
-            --require numpy Pillow pycryptodome reedsolo PySide6-Essentials PySide6-Addons shiboken6
+            --require numpy Pillow pycryptodome reedsolo PySide6-Essentials shiboken6
 
       - name: Upload incomplete license inventory for review
         if: failure()
