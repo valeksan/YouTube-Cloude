@@ -749,18 +749,18 @@ class SettingsPage(QWidget):
         # ── FFmpeg ──
         ff_group = QGroupBox("FFmpeg (advanced)")
         ff_layout = QVBoxLayout(ff_group)
-        ff_desc = QLabel("Custom ffmpeg/ffprobe binary. Leave blank to use bundled.")
+        ff_desc = QLabel("Custom ffmpeg/ffprobe binary. Leave blank to search PATH.")
         ff_desc.setStyleSheet("color: #8b949e; font-size: 12px;")
         ff_layout.addWidget(ff_desc)
         ff_row = QHBoxLayout()
         self.ffmpeg_edit = QLineEdit()
-        self.ffmpeg_edit.setPlaceholderText("Path to ffmpeg.exe / ffmpeg (blank = bundled)")
+        self.ffmpeg_edit.setPlaceholderText("Path to ffmpeg.exe / ffmpeg (blank = PATH)")
         ff_row.addWidget(self.ffmpeg_edit)
         self.ffmpeg_browse_btn = QPushButton("Browse...")
         self.ffmpeg_browse_btn.clicked.connect(self._browse_ffmpeg)
         ff_row.addWidget(self.ffmpeg_browse_btn)
-        self.ffmpeg_reset_btn = QPushButton("Use bundled")
-        self.ffmpeg_reset_btn.setToolTip("Clear and use bundled ffmpeg")
+        self.ffmpeg_reset_btn = QPushButton("Use system FFmpeg")
+        self.ffmpeg_reset_btn.setToolTip("Clear and search PATH for ffmpeg")
         self.ffmpeg_reset_btn.clicked.connect(self._reset_ffmpeg)
         ff_row.addWidget(self.ffmpeg_reset_btn)
         ff_layout.addLayout(ff_row)
@@ -787,7 +787,7 @@ class SettingsPage(QWidget):
         enc_layout.addLayout(key_row)
 
         enc_info = QLabel(
-            "Key is hashed with SHA-256 before use.\n"
+            "PBKDF2-HMAC-SHA256 + AES-256-GCM.\n"
             "Leave blank to disable encryption."
         )
         enc_info.setStyleSheet("color: #8b949e; font-size: 12px;")
@@ -837,11 +837,11 @@ class SettingsPage(QWidget):
     def _update_ffmpeg_status(self) -> None:
         path = self.ffmpeg_edit.text().strip()
         if not path:
-            # check bundled
+            # Resolve custom, system, or older/user-supplied bundled executables.
             try:
                 from youtube_cloude.video_io import _find_ffmpeg
                 found = _find_ffmpeg()
-                self.ffmpeg_status.setText(f"Using: {found} (bundled/system)")
+                self.ffmpeg_status.setText(f"Using: {found}")
                 self.ffmpeg_status.setStyleSheet("color: #3fb950; font-size: 11px;")
             except Exception as e:
                 self.ffmpeg_status.setText(str(e))

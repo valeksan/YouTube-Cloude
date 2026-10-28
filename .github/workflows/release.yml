@@ -96,72 +96,20 @@ jobs:
         shell: bash
         run: pip install -e ".[dev,gui]" nuitka ordered-set "PySide6>=6.5"
 
-      - name: Cache ffmpeg (Linux)
-        if: runner.os == 'Linux'
-        id: cache-ffmpeg
-        uses: actions/cache@v4
+      # FFmpeg/ffprobe remain external until a reviewed binary/source bundle exists.
+      - name: Collect Python license files and build inventory
+        shell: bash
+        run: |
+          python scripts/collect_licenses.py --output release-legal \
+            --require numpy Pillow pycryptodome reedsolo PySide6-Essentials PySide6-Addons shiboken6
+
+      - name: Upload incomplete license inventory for review
+        if: failure()
+        uses: actions/upload-artifact@v4
         with:
-          path: /usr/local/bin
-          key: ffmpeg-amd64-static-v3
-
-      # ── ffmpeg ──
-      - name: Install ffmpeg (Linux)
-        if: runner.os == 'Linux' && steps.cache-ffmpeg.outputs.cache-hit != 'true'
-        shell: bash
-        run: |
-          for i in 1 2 3 4 5; do
-            curl -sfL --retry 3 --retry-delay 5 \
-              https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz | \
-              tar -xJ --wildcards --strip-components=1 -C /usr/local/bin '*/ffmpeg' '*/ffprobe' && break || true
-            echo "Attempt $i failed, retrying in $((i*5))s..." >&2
-            sleep $((i*5))
-          done
-          command -v ffmpeg &>/dev/null || { echo "::error::ffmpeg install failed after retries"; exit 1; }
-      - name: Show ffmpeg version (Linux)
-        if: runner.os == 'Linux'
-        shell: bash
-        run: |
-          ffmpeg -version | head -1
-          ffprobe -version | head -1
-      - name: Install ffmpeg (Windows)
-        if: runner.os == 'Windows'
-        shell: bash
-        run: |
-          if ! command -v ffmpeg &>/dev/null; then
-            choco install ffmpeg -y
-          fi
-      - name: Install ffmpeg (macOS)
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          if ! command -v ffmpeg &>/dev/null; then
-            brew install ffmpeg
-          fi
-
-      - name: Bundle ffmpeg binaries
-        shell: bash
-        run: |
-          mkdir -p ffmpeg-bin
-          # Copy installed ffmpeg/ffprobe into ffmpeg-bin for bundling
-          if command -v ffmpeg &>/dev/null; then
-            cp "$(command -v ffmpeg)" ffmpeg-bin/ffmpeg 2>/dev/null || cp "$(which ffmpeg)" ffmpeg-bin/ffmpeg 2>/dev/null || true
-            # Windows: ffmpeg is ffmpeg.exe
-            if [ -f "ffmpeg-bin/ffmpeg" ] && [ "$RUNNER_OS" = "Windows" ]; then
-              mv ffmpeg-bin/ffmpeg ffmpeg-bin/ffmpeg.exe 2>/dev/null || true
-            fi
-          fi
-          if command -v ffprobe &>/dev/null; then
-            cp "$(command -v ffprobe)" ffmpeg-bin/ffprobe 2>/dev/null || cp "$(which ffprobe)" ffmpeg-bin/ffprobe 2>/dev/null || true
-            if [ -f "ffmpeg-bin/ffprobe" ] && [ "$RUNNER_OS" = "Windows" ]; then
-              mv ffmpeg-bin/ffprobe ffmpeg-bin/ffprobe.exe 2>/dev/null || true
-            fi
-          fi
-          # Fallback: search common Windows chocolatey path
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            [ -f ffmpeg-bin/ffmpeg.exe ] || cp "C:/ProgramData/chocolatey/bin/ffmpeg.exe" ffmpeg-bin/ffmpeg.exe 2>/dev/null || true
-            [ -f ffmpeg-bin/ffprobe.exe ] || cp "C:/ProgramData/chocolatey/bin/ffprobe.exe" ffmpeg-bin/ffprobe.exe 2>/dev/null || true
-          fi
-          echo "=== ffmpeg-bin ==="; ls -lh ffmpeg-bin/ 2>/dev/null || echo "no ffmpeg-bin"; echo "=== ffmpeg version ==="; ffmpeg -version 2>/dev/null | head -1 || ./ffmpeg-bin/ffmpeg -version 2>/dev/null | head -1 || true
+          name: licensing-review-${{ matrix.artifact }}
+          path: release-legal/
+          retention-days: 7
 
       # ── CLI: Nuitka (compiled) ──
       - name: Build CLI (Nuitka)
@@ -174,20 +122,12 @@ jobs:
           if [ "$RUNNER_OS" = "Windows" ]; then
             ONEFILE="--onefile"
           fi
-          # Prepare ffmpeg data-file args if bundled binaries exist (platform-specific)
-          FFMPEG_ARGS=""
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            [ -f ffmpeg-bin/ffmpeg.exe ] && FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffmpeg.exe=ffmpeg.exe"
-            [ -f ffmpeg-bin/ffprobe.exe ] && FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffprobe.exe=ffprobe.exe"
-          else
-            [ -f ffmpeg-bin/ffmpeg ] && FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffmpeg=ffmpeg"
-            [ -f ffmpeg-bin/ffprobe ] && FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffprobe=ffprobe"
-          fi
           python -m nuitka \
             --standalone $ONEFILE \
             --include-package=youtube_cloude \
             --include-package=reedsolo \
-            $FFMPEG_ARGS \
+            --include-data-dir=release-legal=legal \
+            --report=cli-compilation-report.xml \
             --output-filename=youtube-cloude \
             --output-dir=nuitka-build \
             --assume-yes-for-downloads \
@@ -207,21 +147,14 @@ jobs:
             ONEFILE="--onefile"
             NUITKA_FLAGS="--windows-console-mode=disable"
           fi
-          FFMPEG_ARGS=""
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            [ -f ffmpeg-bin/ffmpeg.exe ] && FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffmpeg.exe=ffmpeg.exe"
-            [ -f ffmpeg-bin/ffprobe.exe ] && FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffprobe.exe=ffprobe.exe"
-          else
-            [ -f ffmpeg-bin/ffmpeg ] && FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffmpeg=ffmpeg"
-            [ -f ffmpeg-bin/ffprobe ] && FFMPEG_ARGS="$FFMPEG_ARGS --include-data-files=$(pwd)/ffmpeg-bin/ffprobe=ffprobe"
-          fi
           python -m nuitka \
             --standalone $ONEFILE \
             --enable-plugin=pyside6 \
             --include-package=youtube_cloude \
             --include-package=reedsolo \
             --include-package-data=PySide6 \
-            $FFMPEG_ARGS \
+            --include-data-dir=release-legal=legal \
+            --report=gui-compilation-report.xml \
             --output-filename=youtube-cloude-gui \
             --output-dir=nuitka-build \
             --assume-yes-for-downloads \
@@ -240,6 +173,9 @@ jobs:
           TAG="${{ inputs.version }}"
           ARTIFACT="${{ matrix.artifact }}"
           mkdir -p dist
+          python -m zipfile -c "dist/licensing-${TAG}-${ARTIFACT}.zip" release-legal
+          cp cli-compilation-report.xml "dist/cli-compilation-report-${ARTIFACT}.xml"
+          cp gui-compilation-report.xml "dist/gui-compilation-report-${ARTIFACT}.xml"
 
           if [ "$RUNNER_OS" = "Windows" ]; then
             [ -f nuitka-build/youtube-cloude.exe ] && \
@@ -367,6 +303,15 @@ jobs:
         shell: bash
         run: pip install buildozer==1.5.0 cython==0.29.36 kivy==2.3.0
 
+      - name: Stage repository license notices for Android
+        shell: bash
+        run: |
+          mkdir -p src/legal/project/recipes src/legal/project/docs
+          cp LICENSE THIRD_PARTY_NOTICES.md CONTRIBUTORS.md src/legal/project/
+          cp recipes/LICENSE src/legal/project/recipes/
+          cp docs/LICENSING_AUDIT.md src/legal/project/docs/
+          # These are repository notices, not a host-derived APK inventory.
+
       - name: Create buildozer.spec
         shell: bash
         run: |
@@ -381,7 +326,7 @@ jobs:
           package.name = youtube_cloude
           package.domain = com.valeksan
           source.dir = src
-          source.include_exts = py,png,jpg,kv,atlas
+          source.include_exts = py,png,jpg,kv,atlas,md,txt,json
           source.main = youtube_cloude.gui_kivy:main
           version = ANDROIDVERSIONPLACEHOLDER
           requirements = python3,kivy,numpy,pillow,pycryptodome,reedsolo,requests==2.25.1
@@ -411,19 +356,26 @@ jobs:
           exit $EXIT
         timeout-minutes: 120
 
+      - name: Package Android repository notices
+        shell: bash
+        run: |
+          python -m zipfile -c "bin/licensing-${{ inputs.version }}-android.zip" src/legal
+
       - name: Upload Android APK
         uses: actions/upload-artifact@v4
         if: always()
         with:
           name: binaries-android
-          path: bin/*.apk
+          path: |
+            bin/*.apk
+            bin/licensing-*-android.zip
           retention-days: 7
 
   # ── Release ─────────────────────────────────────────────────────────────
   release:
     needs: [build-desktop, build-android]
     runs-on: ubuntu-latest
-    if: needs.build-desktop.result == 'success' && needs.build-android.result == 'success'
+    if: ${{ needs.build-desktop.result == 'success' && needs.build-android.result == 'success' && !inputs.dry_run }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -471,6 +423,12 @@ jobs:
             |----------|-----|
             | **Android** (arm64) | `youtube_cloude-*.apk` |
 
+            ### Licensing and external tools
+            - This is a draft pending the review in `docs/LICENSING_AUDIT.md`.
+            - Install FFmpeg and ffprobe separately, then add them to PATH or select their paths in Settings.
+            - Desktop license texts and build-environment inventories are included under `legal/` and in `licensing-*.zip`.
+            - These inventories do not replace the outstanding native-library, Qt and Android target review.
+
             ### Desktop CLI
             ```bash
             youtube-cloude encode secret.txt output.mp4 --format ytv2
@@ -487,11 +445,12 @@ jobs:
             - Or via Termux: `pkg install python ffmpeg && pip install youtube-cloude`
 
             ### Build Info
-            - **All builds**: Nuitka (compiled, 2-5× faster than interpreted Python)
+            - **Desktop builds**: Nuitka
             - **Desktop GUI**: PySide6 via Nuitka pyside6 plugin
             - **Android**: Kivy GUI via Buildozer (native APK)
           files: artifacts/**/*
-          draft: false
+          # Keep releases in draft while docs/LICENSING_AUDIT.md remains open.
+          draft: true
           prerelease: false
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

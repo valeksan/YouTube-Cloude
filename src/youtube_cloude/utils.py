@@ -89,13 +89,13 @@ def add_ffmpeg_args(parser) -> None:  # type: ignore[type-arg]
         '--ffmpeg',
         metavar='PATH',
         default=None,
-        help='Custom ffmpeg binary (default: bundled, then PATH, or $YOUTUBE_CLOUDE_FFMPEG)',
+        help='Custom ffmpeg binary (priority: --ffmpeg, environment, next to executable, PATH, older bundle)',
     )
     parser.add_argument(
         '--ffprobe',
         metavar='PATH',
         default=None,
-        help='Custom ffprobe binary (default: bundled, then PATH, or $YOUTUBE_CLOUDE_FFPROBE)',
+        help='Custom ffprobe binary (priority: --ffprobe, environment, next to executable, PATH, older bundle)',
     )
 
 
@@ -210,7 +210,7 @@ examples:
     add_ffmpeg_args(dec)
 
     args = parser.parse_args()
-    # Apply custom ffmpeg paths early (env > bundled > PATH)
+    # Apply command-line overrides before runtime path resolution
     if getattr(args, 'ffmpeg', None):
         os.environ['YOUTUBE_CLOUDE_FFMPEG'] = args.ffmpeg
     if getattr(args, 'ffprobe', None):
