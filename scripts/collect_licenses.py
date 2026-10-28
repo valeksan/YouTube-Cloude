@@ -19,6 +19,11 @@ import sysconfig
 
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+QT_OPEN_SOURCE_PACKAGES = {
+    "pyside6", "pyside6-essentials", "pyside6-addons",
+    "pyside6-pdf", "pyside6-webengine", "shiboken6",
+}
+QT_REQUIRED_LICENSE_TEXTS = {"lgpl-3.0-only.txt", "gpl-3.0-only.txt"}
 
 
 def canonical_name(name: str) -> str:
@@ -119,6 +124,15 @@ def collect(output: Path, required: list[str]) -> dict:
         if canonical_name(item["name"]) in required_names
         and (not item["notice_files"] or item["missing_notice_files"])
     )
+    # A commercial reference alone must not pass an open-source Qt build.
+    # These texts are necessary, not a complete notice or relinking review.
+    for item in inventory:
+        key = canonical_name(item["name"])
+        if key in required_names and key in QT_OPEN_SOURCE_PACKAGES:
+            names = {PurePosixPath(notice["path"]).name.lower()
+                     for notice in item["notice_files"]}
+            if not QT_REQUIRED_LICENSE_TEXTS.issubset(names):
+                unresolved.add(key)
     if unresolved:
         raise ValueError("Missing package or incomplete notice files: " + ", ".join(sorted(unresolved)))
     return report

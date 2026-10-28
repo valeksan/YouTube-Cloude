@@ -63,6 +63,28 @@ def test_required_package_must_be_installed(tmp_path, monkeypatch):
         collector.collect(tmp_path / "legal", ["missing-dependency"])
 
 
+@pytest.mark.parametrize("name", ["PySide6-Essentials", "PySide6-Addons", "shiboken6"])
+def test_qt_commercial_reference_is_not_open_source_notice(tmp_path, monkeypatch, name):
+    relative = "package.dist-info/licenses/LicenseRef-Qt-Commercial.txt"
+    path = tmp_path / relative
+    path.parent.mkdir(parents=True)
+    path.write_text("Commercial license reference")
+    monkeypatch.setattr(collector.metadata, "distributions", lambda: [Distribution(tmp_path, [relative], name)])
+    with pytest.raises(ValueError, match="incomplete notice"):
+        collector.collect(tmp_path / "legal", [name])
+    assert (tmp_path / "legal/build-environment.json").is_file()
+
+
+def test_qt_required_open_source_texts_are_collected(tmp_path, monkeypatch):
+    paths = ["package.dist-info/licenses/LGPL-3.0-only.txt", "package.dist-info/licenses/GPL-3.0-only.txt"]
+    for relative in paths:
+        path = tmp_path / relative
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("test fixture, not a license clearance")
+    monkeypatch.setattr(collector.metadata, "distributions", lambda: [Distribution(tmp_path, paths, "shiboken6")])
+    assert len(collector.collect(tmp_path / "legal", ["shiboken6"])["packages"][0]["notice_files"]) == 2
+
+
 def test_editable_project_metadata_does_not_duplicate_project_notices(tmp_path, monkeypatch):
     editable = Distribution(tmp_path, [], name="youtube-cloude")
     monkeypatch.setattr(collector.metadata, "distributions", lambda: [editable, editable])

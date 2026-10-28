@@ -19,10 +19,12 @@ Commit: `752c82fd6db9fd66603dc0ac401fd59c4eeb727a`.
 The Linux and macOS inventories record PySide6, PySide6-Addons,
 PySide6-Essentials and shiboken6 at `6.12.0`, plus PySide6-Pdf and
 PySide6-WebEngine at `6.12.0.140`. These inventories report no notice files
-for those six packages. The Windows install log records the same versions;
-its collector succeeded, but the collector only verifies that required
-packages have at least one discovered notice file and no missing declared
-notice paths. It does not check that all required license and copyright texts
+for those six packages. The Windows install log records the same versions.
+The Windows notice ZIP records exactly one notice for each of those six
+packages: `LicenseRef-Qt-Commercial.txt`. The previous collector accepted that
+commercial reference without evidence of a commercial entitlement. The updated
+collector requires LGPL-3.0 and GPL-3.0 texts for required Qt packages, but it
+does not check that all required license and copyright texts
 for their bundled native libraries are present. Do not infer the set of
 actually shipped native libraries from installed packages alone.
 
@@ -30,6 +32,9 @@ The Windows log records Nuitka `--onefile`, Qt plugins `iconengines`,
 `imageformats`, `platforms`, `styles` and `tls`, and 3312 data files from
 `--include-package-data=PySide6`. A onefile executable's extracted payload
 and replacement behavior require inspection and an actual replacement test.
+The report lists Qt6Core, Qt6Gui, Qt6Network, Qt6Pdf, Qt6Svg, Qt6Widgets and
+shiboken DLLs. The GUI executable SHA-256 is
+`83144c0bc41e8974a3e1d8516469d0c2d83bb59cb9b0d2f55b264a117cdef547`.
 The compilation report is supporting evidence, not a substitute for checking
 the final payload. The Windows artifact is an Actions download even though
 the release job was skipped; a draft or failed release run does not make an
